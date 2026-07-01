@@ -35,6 +35,15 @@ def extract_rows(path: str | Path) -> tuple[list[RawTxn], dict]:
         else:
             info["extraction_mode"] = "pdf_tables"
             txns, ginfo = grid_to_txns(grid)
+            if not txns:
+                # Table detection produced garbage (mini/decorative tables).
+                # Retry with the raw-text line parser before giving up.
+                from .pdf_digital import read_pdf_text_lines
+
+                fallback = read_pdf_text_lines(path)
+                if fallback:
+                    info["extraction_mode"] = "pdf_text_regex_retry"
+                    txns, ginfo = grid_to_txns([FALLBACK_HEADER, *fallback], base_confidence=0.85)
     elif kind in ("xlsx", "xls"):
         txns, ginfo = grid_to_txns(read_excel_grid(path, kind))
     elif kind == "csv":

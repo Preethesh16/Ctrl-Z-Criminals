@@ -52,3 +52,32 @@ def test_no_header_grid():
     txns, info = grid_to_txns([["random", "junk"], ["more", "junk"]])
     assert txns == []
     assert info["header_row"] is None
+
+
+def test_dash_separated_headers():
+    """Real Finacle export: TRAN-DATE | WITHDRAWAL | DEPOSIT headers."""
+    grid = [
+        ["TRAN-DATE", "TRAN_PARTICULAR", "CHQ-NUM", "WITHDRAWAL", "DEPOSIT", "BALANCE"],
+        ["16-09-2024", "SGST FOR DT:13-09-2024", "", "17.91", "", "2765.18"],
+    ]
+    txns, info = grid_to_txns(grid)
+    assert len(txns) == 1
+    assert txns[0].direction == "DEBIT"
+    assert txns[0].amount == Decimal("17.91")
+
+
+def test_multiline_cell_explosion():
+    """HDFC-style PDFs pack many txns per cell, newline-separated."""
+    from app.ingest.pdf_digital import explode_multiline_rows
+
+    grid = [
+        ["Date", "Narration", "Withdrawal Amt.", "Deposit Amt.", "Closing Balance"],
+        ["27/09/23\n28/09/23", "UPI-ONE\nUPI-TWO", "19.00\n0.00", "0.00\n500.00", "217.22\n717.22"],
+    ]
+    exploded = explode_multiline_rows(grid)
+    assert len(exploded) == 3  # header + 2 txn rows
+    txns, _ = grid_to_txns(exploded)
+    assert len(txns) == 2
+    assert txns[0].direction == "DEBIT"
+    assert txns[1].direction == "CREDIT"
+    assert txns[1].amount == Decimal("500.00")

@@ -10,12 +10,13 @@ import re
 COLUMN_ALIASES: dict[str, list[str]] = {
     "date": [
         "txn dt", "tran date", "tran_date", "txn date", "txn_date", "transaction date",
-        "date", "value date", "post date", "pstd_dt", "dat_txn_processing",
+        "trans date", "trans dt", "date", "value date", "post date", "pstd_dt",
+        "dat_txn_processing",
     ],
     "narration": [
         "narration", "particulars", "tran particular", "tran_particular", "description",
-        "txt_txn_narrative_to", "txt_tran_particular", "txt_txn_desc", "remarks", "rmks",
-        "transaction details", "details",
+        "transaction particulars", "txt_txn_narrative_to", "txt_tran_particular",
+        "txt_txn_desc", "remarks", "rmks", "transaction details", "details",
     ],
     "debit": [
         "debit", "dr", "dr_amt", "debit amount", "withdrawals", "withdrawal", "withdrawal amt",
@@ -44,7 +45,8 @@ _HEADER_KEYWORDS = (
 
 
 def _norm(cell) -> str:
-    return re.sub(r"[^a-z0-9/ _.]", "", str(cell).strip().lower().replace("\n", " "))
+    s = str(cell).strip().lower().replace("\n", " ").replace("-", " ")
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/ _.]", "", s))
 
 
 def score_header_row(cells: list) -> int:
