@@ -8,7 +8,8 @@
 - **Phase**: 1 — Foundation (in progress)
 - **Working setup**: `backend/.venv` (Python 3.14), deps in `backend/requirements.txt`, run tests with `cd backend && .venv/bin/python -m pytest -q`
 - **Real-data harness**: `backend/tools/validate_dataset.py` — runs extractor over the confidential `Bank-statements-dataset/` (local only, never committed) and prints aggregate stats
-- **Next up**: fix zero-row/failed files from validation, wire FastAPI endpoints (cases/upload/jobs/transactions), publish OpenAPI contract for Person B, balance-consistency validation
+- **Real-data coverage**: **151/162 files (93.2%), 182,515 transactions, 0 crashes** (validation round 3)
+- **Next up (Phase 2)**: the 11 remaining zero-row files — fixed-width TXT parser (NITIN/shivlal, Kerala Gramin), PNB "Customer Account Ledger" dash-table layout (DEVANSHU, KOMAL), BOM_Statement FTP layout, `STATEMENT 1026*.pdf`, `4513362998.pdf`, `8642666611469255.pdf`; then balance-consistency check, cleaning suite, OCR pipeline, review-queue API
 
 ## Key dataset intelligence (from recon of the real police data — 2026-07-02)
 
@@ -30,9 +31,16 @@
 
 ## Log
 
-### 2026-07-02 — Session 1: recon + extraction core
+### 2026-07-02 — Session 1: recon + extraction core + API (Phase 1 complete for lane A)
 - Created branch `person-a/p1-foundation`.
 - Ran structure-only recon over the confidential dataset (aggregates only; nothing committed) — findings above.
-- Built the full extraction core (see Architecture) driven by the real layouts; 17 unit tests passing.
-- Built `tools/validate_dataset.py`; first full-dataset validation run in progress — results and fixes to be logged next entry.
-- Confidentiality: dataset stays git-ignored; validation prints aggregate counts only; `LLM_ENABLED` stays false.
+- Built the full extraction core (see Architecture) driven by the real layouts.
+- Built `tools/validate_dataset.py` and iterated three rounds against all 162 real files:
+  - **Round 1**: 124/162 ok, 145,763 txns, 0 crashes. Diagnosed the 38 zero-row files.
+  - **Fixes**: header normalizer converts dashes→spaces (Finacle `TRAN-DATE|WITHDRAWAL|DEPOSIT`); added `trans date`/`trans dt`/`transaction particulars` aliases; multiline-cell explosion for HDFC packed rows; regex-line retry when detected tables map to nothing; `\s*` after date in line regex (glued date+ref).
+  - **Round 2**: 142/162 ok, 179,677 txns. Regression: my explosion split Bandhan's *wrapped* cells (`20-MAR-\n2025`). Fix: explode only when a cell's newline parts are ≥2 parseable dates, else unwrap-join; tolerant month-name date separators.
+  - **Round 3**: **151/162 ok (93.2%), 182,515 txns, 0 crashes.**
+- Channel census on real data: UPI 121,776 / IMPS 15,140 / NEFT 15,036 / ATM 8,929 / UNKNOWN 15,807 (8.7% — acceptable; officer annotation covers it).
+- Built FastAPI layer: POST/GET cases, document upload (SHA-256 → Evidence Locker, duplicate-hash 409), background parse job + polling, paginated transactions with needs_review filter. `backend/openapi.json` committed — **Person B: this is your contract.**
+- Tests: 20 passing incl. end-to-end API flow. Fixed en route: txn_time string→`time` coercion, Decimal→string wire serialization (`DecimalStr`), stray line in main.py.
+- Confidentiality: dataset stays git-ignored (verified before every commit); validation prints aggregate counts only; `LLM_ENABLED` stays false.
