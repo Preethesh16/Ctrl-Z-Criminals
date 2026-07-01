@@ -8,7 +8,7 @@ Design north star: **a wizard, not a tool.** Non-technical police officers. Larg
 
 ## Phase 1 — Foundation
 
-1. **Scaffold**: Vite + React 18 + TypeScript (strict) + Tailwind; router; layout shell with TraceNet branding.
+1. **Scaffold**: ✅ already done — Vite + React 18 + TS + Tailwind v4 + framer-motion with the full design-token theme (`src/styles/theme.css`), motion presets (`src/theme/motion.ts`), and UI primitives (`src/components/ui/`). Read the "Design system" and "Motion" rules in CLAUDE.md before writing any component. Remaining: router + replace the showcase `App.tsx` with the real layout shell.
 2. **API layer**: typed client generated from Person A's OpenAPI JSON; mock adapter with fixture data for offline dev.
 3. **Cases page**: list + big "New Case" button → form (FIR no., complainant, fraud amount, date).
 4. **Case wizard shell**: stepper Upload → Review → Analyze.

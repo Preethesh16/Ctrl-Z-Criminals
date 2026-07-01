@@ -20,7 +20,7 @@
 - [ ] API: cases, upload, job status, transactions list — **publish OpenAPI contract for Person B**
 
 ### Person B
-- [ ] Frontend scaffold: Vite + React 18 + TS + Tailwind
+- [x] Frontend scaffold: Vite + React 18 + TS + Tailwind v4 + framer-motion + design-token theme & motion presets (done: 2026-07-02, setup)
 - [ ] Typed API client generated from OpenAPI contract + mock fixtures fallback
 - [ ] Cases list page + New Case form (FIR no., complainant, fraud amount)
 - [ ] Case wizard shell (Upload → Review → Analyze steps)

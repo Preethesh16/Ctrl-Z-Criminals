@@ -45,6 +45,9 @@ Work proceeds in 4 phases (see plan.md §6 and the task files). Finish and check
 
 - Backend: Python 3.12, type hints everywhere, Pydantic v2 models for all API I/O, pytest for every module in `backend/tests/`. Run `pytest` before every commit.
 - Frontend: TypeScript strict, components in `frontend/src/components/`, pages in `frontend/src/pages/`, all server calls through the typed client in `frontend/src/api/`.
+- **Design system (mandatory)**: all colors, type sizes, radii, shadows, and spacing come from the tokens in `frontend/src/styles/theme.css` — never hardcode hex values, px sizes, or ad-hoc shadows. Use the component classes (`card`, `btn-primary`, `btn-secondary`, `tag`, `stat-number`) and Tailwind utilities backed by the tokens (`bg-primary`, `text-text-secondary`, `rounded-card`, …). Palette: background #F6F7FB, surface white, sidebar #16161D, primary #2F6FED, secondary #8B7CF6, warning #F5A623, success #2FC5A0, border #E5E7EB. Font: Inter (400/500/600/700).
+- **Motion (mandatory)**: all animations come from the framer-motion presets in `frontend/src/theme/motion.ts` (`fadeIn`, `slideUp`, `staggerContainer`, `hoverScale`, `transitions`) — never define ad-hoc variants per page. Entrances ≤0.3s easeOut, interactions 0.2s easeInOut; subtle and fast, this is an investigation tool.
+- Reusable UI primitives live in `frontend/src/components/ui/` (`Button`, `Card`, `StatCard`) — extend these, don't fork them. `src/App.tsx` currently shows the sanctioned conventions; replace it with real pages but keep the patterns.
 - Money is `Decimal` (backend) / integer paise or string (API JSON) — never float.
 - All timestamps stored UTC, displayed IST.
 - Never commit `.env`, API keys, or real bank statements. Demo data comes only from `tools/statement-forge/`.
