@@ -35,8 +35,8 @@ def parse_date(value, dayfirst: bool = True) -> date | None:
         return None
     s = _TIME_RE.sub("", s).strip().strip(",").strip()
 
-    # 01-Feb-2025 / 01 FEB 25 / 01Feb2025
-    m = re.match(r"^(\d{1,2})[\s\-/]?([A-Za-z]{3,9})[\s\-/]?(\d{2,4})$", s)
+    # 01-Feb-2025 / 01 FEB 25 / 01Feb2025 / "20-MAR- 2025" (unwrapped PDF cell)
+    m = re.match(r"^(\d{1,2})[\s\-/]{0,2}([A-Za-z]{3,9})[\s\-/]{0,2}(\d{2,4})$", s)
     if m:
         mon = _MONTHS.get(m.group(2)[:3].lower())
         if mon:

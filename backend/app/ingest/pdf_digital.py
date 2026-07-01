@@ -35,22 +35,35 @@ def pdf_has_text(path: str | Path, min_chars: int = 50) -> bool:
 def explode_multiline_rows(grid: list[list]) -> list[list]:
     """Split rows whose cells pack several transactions separated by newlines.
 
-    pdfplumber sometimes returns one table row per PAGE for HDFC-style
-    layouts: every cell holds N newline-separated values. Explode such rows
-    into N rows, carrying single-value cells (e.g. narration fragments) into
-    the first exploded row only.
+    Two very different layouts produce "\n" inside cells:
+    - HDFC-style packing: one table row per PAGE; every cell holds N
+      newline-separated values, and the date cell holds N complete dates.
+      → explode into N rows.
+    - Bandhan-style wrapping: ONE value wrapped across lines inside its
+      cell ("20-MAR-\n2025"). → unwrap (join), never explode.
+
+    The date cell decides: explode only when some cell's newline parts are
+    themselves ≥2 parseable dates.
     """
+    from ..normalize.dates import parse_date
+
     out: list[list] = []
     for row in grid:
         counts = [len(str(c).split("\n")) for c in row if c is not None and str(c).strip()]
         n = max(counts, default=1)
-        # Explode only when several cells agree on the same multi-line count.
-        if n < 2 or sum(1 for c in counts if c == n) < 2:
+        if n < 2:
             out.append(row)
             continue
+
         parts = [str(c).split("\n") if c is not None else [] for c in row]
-        for i in range(n):
-            out.append([p[i] if i < len(p) else None for p in parts])
+        packed = any(
+            sum(1 for part in p if parse_date(part.strip())) >= 2 for p in parts
+        )
+        if packed and sum(1 for c in counts if c == n) >= 2:
+            for i in range(n):
+                out.append([p[i] if i < len(p) else None for p in parts])
+        else:
+            out.append([" ".join(p).strip() if p else None for p in parts])
     return out
 
 
