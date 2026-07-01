@@ -2,6 +2,8 @@
 
 Scope: `backend/app/**`, `backend/tests/**`, `tools/statement-forge/**`. Read plan.md first; tick progress.md as you go. Branch: `person-a/p<phase>-<feature>`.
 
+> ⚠️ **Confidential data**: validate parsers locally against `Bank-statements-dataset/` (real police data — git-ignored, NEVER push, never use in committed fixtures or LLM calls). All committed test fixtures come from statement-forge only. Full rules in CLAUDE.md.
+
 ## Phase 1 — Foundation
 
 1. **Scaffold**: `backend/` with FastAPI app factory, `config.py` (pydantic-settings, `.env`), `db.py` (SQLAlchemy 2, `DATABASE_URL` with SQLite fallback), Alembic migrations.

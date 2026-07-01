@@ -67,6 +67,10 @@ Database and API-key setup: see **[dbguide.md](dbguide.md)**.
 | [dbguide.md](dbguide.md) | Database + API keys + connection setup |
 | [CLAUDE.md](CLAUDE.md) | Instructions for Claude Code sessions (both members) |
 
+## ⚠️ Confidential test data
+
+`Bank-statements-dataset/` (local only, **never in this repo**) holds real test statements provided by the Bangalore Cybercrime Police. It is git-ignored and must stay off GitHub, cloud databases, and LLM APIs. Local testing only — see CLAUDE.md for the full handling rules. All committed fixtures and demo data are synthetic (`tools/statement-forge/`).
+
 ## Team
 
 **Ctrl+Z Criminals** — CIDECODE 2026, conducted by Cybercrime Police Bangalore.

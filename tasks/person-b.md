@@ -4,6 +4,8 @@ Scope: `frontend/**`, `docker-compose.yml`, nginx config, demo script. Read plan
 
 Design north star: **a wizard, not a tool.** Non-technical police officers. Large type, plain English, red/amber/green only, every action ≤2 clicks from the dashboard.
 
+> ⚠️ **Confidential data**: `Bank-statements-dataset/` (real police data) is local-only and git-ignored — NEVER push it, never screenshot it in demo material or PRs. UI demos use synthetic statement-forge data only. Full rules in CLAUDE.md.
+
 ## Phase 1 — Foundation
 
 1. **Scaffold**: Vite + React 18 + TypeScript (strict) + Tailwind; router; layout shell with TraceNet branding.

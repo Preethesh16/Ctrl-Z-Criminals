@@ -48,6 +48,17 @@ Work proceeds in 4 phases (see plan.md §6 and the task files). Finish and check
 - Money is `Decimal` (backend) / integer paise or string (API JSON) — never float.
 - All timestamps stored UTC, displayed IST.
 - Never commit `.env`, API keys, or real bank statements. Demo data comes only from `tools/statement-forge/`.
+
+## ⚠️ CONFIDENTIAL TEST DATA — `Bank-statements-dataset/`
+
+The `Bank-statements-dataset/` folder (subfolders `primary/`, `Secondary/`) contains **real, confidential test data provided by the Bangalore Cybercrime Police**. Both persons MUST follow these rules — no exceptions:
+
+- **NEVER push this folder to GitHub or any remote.** It is git-ignored in `.gitignore`; do not remove that entry, do not `git add -f` it, do not copy files out of it into tracked paths.
+- Use it **only locally** for testing the parsers and analysis pipeline on your own machine.
+- Never upload its contents to any cloud service — no shared Neon/Supabase DB rows derived from it, no LLM API calls with its contents (keep `LLM_ENABLED=false` when testing against it), no screenshots of it in issues/PRs/demo material.
+- Test fixtures committed to the repo must come **only** from `tools/statement-forge/` synthetic data — never from this folder, not even "anonymized" copies.
+- Before every `git push`, verify with `git status` that nothing from `Bank-statements-dataset/` is staged.
+- The public demo uses synthetic statement-forge data only; the police dataset is for private validation.
 - Secrets/config: environment variables via `.env` (see dbguide.md).
 
 ## Commands
