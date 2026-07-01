@@ -20,16 +20,19 @@
 
 ## Current state (updated: 2026-07-01)
 
-- **Phase**: 1 — Foundation.
-- **Done**: frontend scaffold (Vite + React 18 + TS + Tailwind v4 + framer-motion, design-token theme, motion presets, `Button`/`Card`/`StatCard` primitives, showcase `App.tsx`).
-- **Next up (Phase 1 remaining)**:
-  1. Router + real layout shell (replace showcase `App.tsx`, keep its patterns).
-  2. Typed API client + mock adapter with fixture data (Person A's OpenAPI contract not yet published — mocks are the standing rule).
-  3. Cases list page + New Case form (FIR no., complainant, fraud amount, date).
-  4. Case wizard shell (Upload → Review → Analyze stepper).
-  5. Upload dropzone: multi-file, per-file job-polling progress, "N transactions found" chip, failure states.
-- **Person A state** (per progress.md): nothing ticked yet — no OpenAPI contract, no backend endpoints. All frontend work goes through mocks.
-- **Blockers**: none.
+- **Phase**: 1 — Foundation. **All Person B Phase-1 tasks done** (against mocks).
+- **Done**:
+  - Frontend scaffold (theme tokens, motion presets, `Button`/`Card`/`StatCard`/`Input` primitives).
+  - Router + `AppLayout` shell (react-router-dom; dark sidebar with NavLink active state; showcase `App.tsx` replaced).
+  - API layer: provisional types (`src/api/types.ts`, hand-written from plan.md §4.1), typed client (`src/api/client.ts`), mock adapter (`src/api/mocks/mockAdapter.ts`) with seeded demo case, deterministic synthetic transactions, job-polling simulation and failure states. Default = mocks; `VITE_API_MODE=real` → `/api` proxy → FastAPI :8000 (proxy in vite.config.ts, dev port set to 3000).
+  - Cases page: list + New Case modal (FIR/CEN no., complainant, ₹→paise conversion, incident date, validation).
+  - Case wizard (`/cases/:caseId/wizard`): Upload → Review → Analyze pill stepper. Review shows transactions table with low-confidence (<0.70) rows highlighted; Analyze is a Phase-3 stub.
+  - UploadDropzone: drag-drop + click, multi-file, per-file progress bar with job polling (700ms), "N transactions found" success chip, plain-English failure guidance (password-protected / unsupported format / duplicate file / parse failed).
+  - Placeholder pages with empty-state guidance for Dashboard, Flow Graph, Money Trail, Reports.
+- **Verified**: `npm run build` (tsc strict) + `npm run lint` clean; dev server smoke-tested on :3000.
+- **Person A state** (per progress.md): nothing ticked — no OpenAPI contract yet. When it lands: regenerate `src/api/types.ts`, reconcile field names, run wizard against real API (that's Checkpoint 1).
+- **Blockers**: Checkpoint 1 ("upload digital PDF → parsed txns from real API") needs Person A's endpoints — frontend side is ready.
+- **Next up (Phase 2)**: review queue UI, column-mapping UI, dashboard shell with real cleaning stats, upload hardening polish.
 
 ## Local dataset intel (structure only — contents never leave this machine)
 
@@ -47,6 +50,15 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-01 — Session 2: Phase 1 complete (mock-first)
+- Installed `react-router-dom`; replaced showcase `App.tsx` with real router + `AppLayout` (kept sanctioned sidebar/motion patterns).
+- Built the full API layer (provisional types from plan.md §4.1 + mock adapter + typed client with `VITE_API_MODE` switch); mock simulates job polling, ~15% low-confidence OCR rows, password-protected/duplicate/unsupported failures (trigger the password flow in demos by naming a file `...protected.pdf`).
+- Built CasesPage (+ New Case modal), CaseWizardPage (stepper + review table), UploadDropzone, placeholder pages; added `Input` UI primitive and `lib/format.ts` (INR paise formatter, IST dates).
+- Fixed `index.html` title → "TraceNet — Bank Statement Analysis". Set vite dev port 3000 + `/api` proxy per CLAUDE.md.
+- Fixed one TS error (`erasableSyntaxOnly` forbids constructor parameter properties). Build + lint clean; dev-server smoke test OK.
+- Ticked all 4 remaining Person B Phase-1 boxes in progress.md with notes.
+- **Next session starts at**: Phase 2 review-queue UI — or Checkpoint 1 integration if Person A's API has landed.
 
 ### 2026-07-01 — Session 1: setup & housekeeping
 - Read plan.md, progress.md, tasks/person-b.md, CLAUDE.md; confirmed lane = Person B, Phase 1.
