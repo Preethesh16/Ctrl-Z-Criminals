@@ -18,15 +18,19 @@ def test_upload_flow():
     case_id = r.json()["id"]
 
     r = client.post(
-        f"/cases/{case_id}/documents",
+        f"/cases/{case_id}/uploads",  # frontend-client alias path
         files={"file": ("stmt.csv", io.BytesIO(CSV), "text/csv")},
     )
     assert r.status_code == 200, r.text
-    job_id = r.json()["id"]
+    up = r.json()
+    assert set(up) == {"document_id", "job_id", "filename", "sha256"}
 
     # TestClient runs BackgroundTasks synchronously — job is done by now.
-    r = client.get(f"/jobs/{job_id}")
-    assert r.json()["status"] == "done", r.json()
+    r = client.get(f"/jobs/{up['job_id']}")
+    body = r.json()
+    assert body["status"] == "done", body
+    assert body["transactions_found"] == 2
+    assert body["document_id"] == up["document_id"]
 
     r = client.get(f"/cases/{case_id}/transactions")
     body = r.json()

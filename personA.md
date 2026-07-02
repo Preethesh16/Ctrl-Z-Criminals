@@ -9,6 +9,7 @@
 - **Working setup**: `backend/.venv` (Python 3.14), deps in `backend/requirements.txt`, run tests with `cd backend && .venv/bin/python -m pytest -q`
 - **Real-data harness**: `backend/tools/validate_dataset.py` — runs extractor over the confidential `Bank-statements-dataset/` (local only, never committed) and prints aggregate stats
 - **Real-data coverage**: **151/162 files (93.2%), 182,515 transactions, 0 crashes** (validation round 3)
+- **Integration state**: Deepthi's Phase-1 frontend merged from main (PR #1). API contract v2 shipped — upload returns `{document_id, job_id, filename, sha256}`, `/uploads` path alias, job `error_code`/`transactions_found`, `POST /cases/{id}/clean`. Her remaining type reconciliation items are listed in progress.md "Deviations" — her lane.
 - **Next up (Phase 2)**: the 11 remaining zero-row files — fixed-width TXT parser (NITIN/shivlal, Kerala Gramin), PNB "Customer Account Ledger" dash-table layout (DEVANSHU, KOMAL), BOM_Statement FTP layout, `STATEMENT 1026*.pdf`, `4513362998.pdf`, `8642666611469255.pdf`; then balance-consistency check, cleaning suite, OCR pipeline, review-queue API
 
 ## Key dataset intelligence (from recon of the real police data — 2026-07-02)
@@ -30,6 +31,17 @@
 - `tests/` — 17 unit tests green (normalize + rows)
 
 ## Log
+
+### 2026-07-02 — Session 2: Person B merge + contract v2 + cleaning suite (Phase 2 started)
+- Merged `origin/main` (Deepthi's Phase-1 frontend, PR #1) into `person-a/p1-foundation`.
+- Audited her provisional `frontend/src/api/types.ts` against the real API — found 6 contract mismatches. Adopted her better designs on the backend (richer upload response, `/uploads` alias, job error codes + transactions_found); documented the 5 frontend-side diffs in progress.md Deviations with @Deepthi tag.
+- Built the cleaning suite (`app/cleaning/`):
+  - `balance_check.py` — FD-07 running-balance validation, auto-detects newest-first statements, restart-on-gap chains.
+  - `dedup.py` — cross-document exact (same ref) + fuzzy (narration ≥0.9) duplicates; flag-only, never delete.
+  - `failed_txn.py` — reversal pairing (marker regex or same reference, 5-day window, one pair per leg); paired legs excluded from flow analysis.
+  - `services/cleaning.py` — idempotent case-level pass exposed at `POST /cases/{id}/clean`, audit-logged.
+- Tests: 32 passing (12 new cleaning tests). Regenerated `openapi.json`.
+- Balance audit over real dataset: results below.
 
 ### 2026-07-02 — Session 1: recon + extraction core + API (Phase 1 complete for lane A)
 - Created branch `person-a/p1-foundation`.
