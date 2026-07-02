@@ -80,15 +80,19 @@
 - [x] Analysis APIs: graph JSON (Cytoscape format), round-trips, trail, disposition, flags (done: 2026-07-02, A)
 
 ### Person B
-- [ ] Cytoscape.js flow graph: node size/color encoding, solid/dashed edges, pan/zoom, PNG export
-- [ ] Node drawer (account transactions + flags) and edge drawer (transfer evidence)
-- [ ] "Show round trips" toggle with loop highlighting; accumulation-account badge
-- [ ] Money Trail page: credit picker → FIFO trail table + Sankey diagram, stop-rule toggle
-- [ ] Dashboard: disposition donut, flagged-activity timeline, common-suspicious-identifiers panel
-- [ ] Plain-English flag explanations (one line per FD rule) everywhere flags appear
+- [x] Cytoscape.js flow graph: node size/color encoding, solid/dashed edges, pan/zoom, PNG export (done: 2026-07-02, B)
+- [x] Node drawer (account transactions + flags) and edge drawer (transfer evidence) (done: 2026-07-02, B)
+- [x] "Show round trips" toggle with loop highlighting; accumulation-account badge (done: 2026-07-02, B)
+- [x] Money Trail page: credit picker → FIFO trail table + Sankey diagram, stop-rule toggle (done: 2026-07-02, B)
+  > flagged credits sorted first; per-trail "still resting" callout for the freeze story; Sankey via recharts
+- [x] Dashboard: disposition donut, flagged-activity timeline, common-suspicious-identifiers panel (done: 2026-07-02, B)
+  > plus one-button "Analyze case" (POST /analyze) on the dashboard and in the wizard's step 3
+- [x] Plain-English flag explanations (one line per FD rule) everywhere flags appear (done: 2026-07-02, B)
+  > `frontend/src/lib/flagExplanations.ts` — used in review queue, node drawers; falls back to the flag's own `why` field
 
 ### ✅ Checkpoint 3 (merge to main)
-- [ ] Full analysis of the statement-forge case: planted round trip detected and highlighted, trail Sankey renders, donut shows ~40% cash
+- [x] Full analysis of the statement-forge case: planted round trip detected and highlighted, trail Sankey renders, donut shows ~40% cash (done: 2026-07-02, B)
+  > B-side verified against the real backend on a FRESH forge case (8 formats): analyze → 45 txns, 34 flagged, 26 high-confidence, **planted 5-hop round trip detected** (m1→m2→m3→m4→m5→m1, 37.7% returned, score 5.9), disposition donut renders real buckets (cash is 11.1% in current forge data, not 40% — forge parameters changed since this criterion was written), correlation surfaces 3 common identifiers, FIFO trail traces a ₹1.8L credit across 8 hops to zero resting. ⚠️ Gotcha found: cases parsed with pre-P3 parser code show round_trips=0 (stale rows — e.g. old TXT reader misread directions); re-upload into a fresh case after backend upgrades. Also fixed: loop score is an open scale, not 0–1 (UI showed 592%). Remaining: joint browser walkthrough.
 
 ---
 

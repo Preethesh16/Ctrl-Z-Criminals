@@ -6,18 +6,25 @@
  * All data is synthetic — never derived from the confidential dataset.
  */
 import type {
+  AnalysisSummary,
   BankTemplateIn,
   BankTemplateOut,
   CaseCreate,
+  CaseGraph,
   CaseOut,
   CaseStats,
   CleanReport,
   ColumnTemplate,
+  CommonIdentifier,
   Direction,
+  Disposition,
   DocumentColumns,
   DocumentOut,
   JobOut,
   Page,
+  RoundTrip,
+  Trail,
+  TrailStopRule,
   TransactionOut,
   TransactionReview,
   UploadOut,
@@ -28,6 +35,7 @@ import { ApiError } from '../errors'
 const SUPPORTED_EXTENSIONS = ['pdf', 'xlsx', 'xls', 'csv', 'tsv', 'docx', 'jpg', 'jpeg', 'png', 'txt']
 
 const cases = new Map<string, CaseOut>()
+const analyzedCases = new Set<string>()
 const documents = new Map<string, DocumentOut>()
 const jobs = new Map<string, JobOut & { _fileKey?: string }>()
 const transactionsByCase = new Map<string, TransactionOut[]>()
@@ -395,6 +403,194 @@ export const mockAdapter = {
         { index: 4, header: 'DEPOSIT AMT', samples: ['1,00,000.00', '', ''] },
         { index: 5, header: 'BAL', samples: ['1,25,000.00 Cr', '1,00,000.00 Cr', '90,000.00 Cr'] },
       ],
+    }
+  },
+
+  /* ---------------- Phase-3 analysis (synthetic story) ---------------- */
+
+  async analyzeCase(caseId: string): Promise<AnalysisSummary> {
+    await delay(900)
+    const txns = transactionsByCase.get(caseId)
+    if (!txns) throw new ApiError(404, 'case not found')
+    analyzedCases.add(caseId)
+    // Flag a few rows with rule evidence so explanations render everywhere.
+    const rand = seededRandom(`analyze-${caseId}`)
+    for (const t of txns) {
+      if (t.excluded || t.flags.some((f) => f.rule === 'ROUND-TRIP')) continue
+      const r = rand()
+      if (r < 0.03) t.flags = [...t.flags, { rule: 'FD-04-SMURFING', why: 'kept below ₹50,000' }]
+      else if (r < 0.05) t.flags = [...t.flags, { rule: 'FD-02-RAPID-OUT' }]
+      else if (r < 0.06) t.flags = [...t.flags, { rule: 'ML-ANOMALY', score: 0.91 }]
+    }
+    const cleaning = await this.cleanCase(caseId)
+    return {
+      cleaning,
+      transactions: txns.length,
+      flagged: txns.filter((t) => t.flags.length > 0).length,
+      round_trips: 1,
+    }
+  },
+
+  async getGraph(caseId: string): Promise<CaseGraph> {
+    await delay(300)
+    if (!analyzedCases.has(caseId))
+      throw new ApiError(404, 'no graph yet — run POST /cases/{id}/analyze first')
+    const mk = (
+      id: string,
+      own: boolean,
+      inflow: number,
+      outflow: number,
+      suspicion: 'high' | 'medium' | 'low',
+      accumulator = false,
+    ) => ({
+      data: {
+        id,
+        label: id.replace('ext:', ''),
+        own_account: own,
+        inflow: `${inflow}.00`,
+        outflow: `${outflow}.00`,
+        txn_count: Math.round((inflow + outflow) / 40000) + 3,
+        suspicion,
+        accumulator,
+      },
+    })
+    const edge = (
+      id: string,
+      source: string,
+      target: string,
+      amount: number,
+      tier: 'confirmed' | 'probable',
+      when: string,
+      channel = 'UPI',
+    ) => ({
+      data: {
+        id,
+        source,
+        target,
+        amount: `${amount}.00`,
+        tier,
+        reference: String(600000000000 + amount),
+        channel,
+        when,
+        txn_ids: [],
+      },
+    })
+    return {
+      nodes: [
+        mk('VICTIM-HDFC', true, 900000, 850000, 'low'),
+        mk('ext:mule1.ramesh@oksbi', false, 500000, 480000, 'high'),
+        mk('ext:mule2.axis', false, 480000, 460000, 'high'),
+        mk('ext:mule3.kotak', false, 460000, 150000, 'high', true),
+        mk('ext:quickmart.store@ybl', false, 60000, 0, 'low'),
+        mk('ext:anita.sharma', false, 90000, 0, 'medium'),
+      ],
+      edges: [
+        edge('e1', 'VICTIM-HDFC', 'ext:mule1.ramesh@oksbi', 500000, 'confirmed', '2026-01-06T10:12:00'),
+        edge('e2', 'ext:mule1.ramesh@oksbi', 'ext:mule2.axis', 480000, 'confirmed', '2026-01-06T10:41:00'),
+        edge('e3', 'ext:mule2.axis', 'ext:mule3.kotak', 460000, 'confirmed', '2026-01-06T11:03:00'),
+        edge('e4', 'ext:mule3.kotak', 'ext:mule1.ramesh@oksbi', 120000, 'probable', '2026-01-06T13:20:00', 'IMPS'),
+        edge('e5', 'VICTIM-HDFC', 'ext:quickmart.store@ybl', 60000, 'confirmed', '2026-01-08T09:00:00', 'POS'),
+        edge('e6', 'VICTIM-HDFC', 'ext:anita.sharma', 90000, 'probable', '2026-01-09T18:30:00', 'NEFT'),
+      ],
+    }
+  },
+
+  async getRoundTrips(caseId: string): Promise<RoundTrip[]> {
+    await delay(250)
+    if (!analyzedCases.has(caseId))
+      throw new ApiError(404, 'no round_trips yet — run POST /cases/{id}/analyze first')
+    return [
+      {
+        loop_id: 'loop-1',
+        path: ['ext:mule1.ramesh@oksbi', 'ext:mule2.axis', 'ext:mule3.kotak', 'ext:mule1.ramesh@oksbi'],
+        hops: 3,
+        amount_out: '480000.00',
+        amount_back: '120000.00',
+        pct_returned: 25.0,
+        elapsed_hours: 2.7,
+        score: 0.82,
+        edges: [
+          { source: 'ext:mule1.ramesh@oksbi', target: 'ext:mule2.axis', amount: '480000.00', tier: 'confirmed', reference: '600000480000', when: '2026-01-06T10:41:00', txn_ids: [] },
+          { source: 'ext:mule2.axis', target: 'ext:mule3.kotak', amount: '460000.00', tier: 'confirmed', reference: '600000460000', when: '2026-01-06T11:03:00', txn_ids: [] },
+          { source: 'ext:mule3.kotak', target: 'ext:mule1.ramesh@oksbi', amount: '120000.00', tier: 'probable', reference: '600000120000', when: '2026-01-06T13:20:00', txn_ids: [] },
+        ],
+      },
+    ]
+  },
+
+  async getCorrelation(caseId: string): Promise<CommonIdentifier[]> {
+    await delay(200)
+    if (!analyzedCases.has(caseId))
+      throw new ApiError(404, 'no correlation yet — run POST /cases/{id}/analyze first')
+    return [
+      {
+        identifier: 'mule1.ramesh@oksbi',
+        names: ['RAMESH KUMAR'],
+        seen_in_accounts: ['VICTIM-HDFC', 'MULE2-AXIS', 'MULE3-KOTAK'],
+        distinct_senders: 3,
+        txn_count: 14,
+      },
+      {
+        identifier: 'quickmart.store@ybl',
+        names: ['QUICKMART STORES'],
+        seen_in_accounts: ['VICTIM-HDFC', 'MULE1-SBI'],
+        distinct_senders: 2,
+        txn_count: 6,
+      },
+    ]
+  },
+
+  async getDisposition(caseId: string): Promise<Disposition> {
+    await delay(200)
+    if (!analyzedCases.has(caseId))
+      throw new ApiError(404, 'no disposition yet — run POST /cases/{id}/analyze first')
+    return {
+      total_debits: '1250000.00',
+      buckets: {
+        cash: { amount: '500000.00', pct: 40.0 },
+        cheque: { amount: '75000.00', pct: 6.0 },
+        redirected: { amount: '550000.00', pct: 44.0 },
+        merchant: { amount: '87500.00', pct: 7.0 },
+        internal: { amount: '0.00', pct: 0.0 },
+        unclassified: { amount: '37500.00', pct: 3.0 },
+      },
+    }
+  },
+
+  async getTrail(caseId: string, txnId: string, stopRule: TrailStopRule = 'tranche'): Promise<Trail> {
+    await delay(350)
+    const txns = transactionsByCase.get(caseId)
+    const credit = txns?.find((t) => t.id === txnId)
+    if (!credit) throw new ApiError(404, 'transaction not found in this case')
+    if (credit.direction !== 'CREDIT')
+      throw new ApiError(422, 'money trail starts from a CREDIT transaction')
+    const amount = Number(credit.amount_inr)
+    const parts = [0.4, 0.35, 0.15]
+    const hops = parts.map((p, i) => ({
+      txn_id: `trail_hop_${i}`,
+      txn_date: credit.txn_date,
+      narration: [
+        'ATM-CASH-WDL/MG ROAD BLR',
+        'UPI/DR/600123/mule2.axis/transfer',
+        'POS RELIANCE SMART BLR',
+      ][i],
+      channel: ['ATM', 'UPI', 'POS'][i],
+      counterparty: [null, 'mule2.axis', 'RELIANCE SMART'][i],
+      attributed: `${Math.round(amount * p)}.00`,
+      debit_total: `${Math.round(amount * p)}.00`,
+    }))
+    const spent = hops.reduce((s, h) => s + Number(h.attributed), 0)
+    return {
+      credit_txn_id: txnId,
+      credit_amount: credit.amount_inr,
+      pre_credit_balance: credit.balance_after
+        ? `${Number(credit.balance_after) - amount}.00`
+        : null,
+      hops,
+      spent: `${spent}.00`,
+      resting: `${Math.max(0, amount - spent)}.00`,
+      stop_rule: stopRule,
+      stopped_early: stopRule === 'balance',
     }
   },
 

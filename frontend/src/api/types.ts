@@ -190,3 +190,111 @@ export interface ColumnTemplate {
   bank_name: string
   mapping: Record<number, CanonicalField>
 }
+
+/* ------------------------------------------------------------------
+ * Phase-3 analysis shapes (real contract — backend/app/services/analysis.py)
+ * ------------------------------------------------------------------ */
+
+/** POST /cases/{id}/analyze response. */
+export interface AnalysisSummary {
+  cleaning: CleanReport
+  transactions: number
+  flagged: number
+  [key: string]: unknown
+}
+
+/** Cytoscape element data. Node sizes/colors derive from these fields. */
+export interface GraphNodeData {
+  id: string
+  label: string
+  own_account: boolean
+  inflow: string
+  outflow: string
+  txn_count: number
+  accumulator?: boolean
+  suspicion: 'high' | 'medium' | 'low'
+}
+
+export type EdgeTier = 'confirmed' | 'probable'
+
+export interface GraphEdgeData {
+  id: string
+  source: string
+  target: string
+  amount: string
+  tier: EdgeTier
+  reference: string | null
+  channel: string
+  when: string
+  txn_ids: string[]
+}
+
+export interface CaseGraph {
+  nodes: Array<{ data: GraphNodeData }>
+  edges: Array<{ data: GraphEdgeData }>
+}
+
+export interface RoundTrip {
+  loop_id: string
+  path: string[]
+  hops: number
+  amount_out: string
+  amount_back: string
+  pct_returned: number
+  elapsed_hours: number
+  score: number
+  edges: Array<{
+    source: string
+    target: string
+    amount: string
+    tier: EdgeTier
+    reference: string | null
+    when: string
+    txn_ids: string[]
+  }>
+}
+
+export interface CommonIdentifier {
+  identifier: string
+  names: string[]
+  seen_in_accounts: string[]
+  distinct_senders: number
+  txn_count: number
+}
+
+export type DispositionBucket =
+  | 'cash'
+  | 'cheque'
+  | 'redirected'
+  | 'merchant'
+  | 'internal'
+  | 'unclassified'
+
+export interface Disposition {
+  total_debits: string
+  buckets: Record<DispositionBucket, { amount: string; pct: number }>
+}
+
+export type TrailStopRule = 'tranche' | 'balance'
+
+export interface TrailHop {
+  txn_id: string
+  txn_date: string
+  narration: string
+  channel: string
+  counterparty: string | null
+  /** Portion of THIS debit funded by the tracked credit. */
+  attributed: string
+  debit_total: string
+}
+
+export interface Trail {
+  credit_txn_id: string
+  credit_amount: string
+  pre_credit_balance: string | null
+  hops: TrailHop[]
+  spent: string
+  resting: string
+  stop_rule: TrailStopRule
+  stopped_early: boolean
+}
