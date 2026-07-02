@@ -109,21 +109,37 @@ _NOISE_LINE = re.compile(
 _HAS_AMOUNT = re.compile(r"\d[\d,]*\.\d{2}")
 
 
+_LONE_AMOUNT = re.compile(rf"^{_AMT}$")
+
+
 def collect_text_lines(text: str, grid: list[list], pattern: re.Pattern = _LINE) -> None:
     """Append transaction rows found in `text` to `grid`.
 
-    Lines that don't match but carry no amounts are treated as narration
-    continuations of the previous transaction (BoB prints the full
-    UPI/IMPS reference on the NEXT line — losing it would break
-    cross-statement linking).
+    Two follow-up-line conventions are handled:
+    - narration continuation (no amounts): appended to the previous row's
+      narration (BoB prints the full UPI/IMPS reference on the NEXT line —
+      losing it would break cross-statement linking);
+    - lone-amount line: the previous row's TRUE balance (AU Bank web
+      exports print "amount rate lcy_amount" on the txn line and the
+      balance alone on the next). When the captured balance was just the
+      LCY duplicate of the amount, the middle "rate" column is noise too.
     """
+    balance_pending = False
     for line in text.splitlines():
         stripped = line.strip()
         m = pattern.match(stripped)
         if m:
             grid.append(_line_to_row(m))
-        elif (grid and len(grid[-1]) == 5 and stripped and len(stripped) < 120
-              and not _NOISE_LINE.search(stripped)
+            balance_pending = True
+        elif not (grid and len(grid[-1]) == 5 and stripped):
+            continue
+        elif balance_pending and _LONE_AMOUNT.match(stripped):
+            row = grid[-1]
+            if row[4] == row[2]:  # old "balance" was the LCY duplicate
+                row[3] = None  # middle column was the exchange rate
+            row[4] = stripped
+            balance_pending = False
+        elif (len(stripped) < 120 and not _NOISE_LINE.search(stripped)
               and not _HAS_AMOUNT.search(stripped)):
             # only extend rows created by this regex (5-col), never table rows
             grid[-1][1] = f"{grid[-1][1]} {stripped}"
