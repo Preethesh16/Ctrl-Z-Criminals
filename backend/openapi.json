@@ -300,6 +300,136 @@
     }
    }
   },
+  "/cases/{case_id}/stats": {
+   "get": {
+    "summary": "Case Stats",
+    "description": "Dashboard headline numbers + cleaning summary (CaseStats shape).",
+    "operationId": "case_stats_cases__case_id__stats_get",
+    "parameters": [
+     {
+      "name": "case_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Case Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CaseStatsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{document_id}/columns": {
+   "get": {
+    "summary": "Document Columns",
+    "description": "Raw grid columns + samples for the guided column-mapping UI.",
+    "operationId": "document_columns_documents__document_id__columns_get",
+    "parameters": [
+     {
+      "name": "document_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Document Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DocumentColumnsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/documents/{document_id}/template": {
+   "post": {
+    "summary": "Apply Template",
+    "description": "Save the officer's column mapping as a bank template and re-parse.",
+    "operationId": "apply_template_documents__document_id__template_post",
+    "parameters": [
+     {
+      "name": "document_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Document Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ColumnTemplateIn"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/templates": {
    "get": {
     "summary": "List Templates",
@@ -758,6 +888,142 @@
     ],
     "title": "CaseOut"
    },
+   "CaseStatsOut": {
+    "properties": {
+     "case_id": {
+      "type": "string",
+      "title": "Case Id"
+     },
+     "documents_count": {
+      "type": "integer",
+      "title": "Documents Count"
+     },
+     "transactions_count": {
+      "type": "integer",
+      "title": "Transactions Count"
+     },
+     "needs_review_count": {
+      "type": "integer",
+      "title": "Needs Review Count"
+     },
+     "flagged_count": {
+      "type": "integer",
+      "title": "Flagged Count"
+     },
+     "accounts_count": {
+      "type": "integer",
+      "title": "Accounts Count"
+     },
+     "round_trips_count": {
+      "type": "integer",
+      "title": "Round Trips Count"
+     },
+     "cleaning": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Cleaning"
+     }
+    },
+    "type": "object",
+    "required": [
+     "case_id",
+     "documents_count",
+     "transactions_count",
+     "needs_review_count",
+     "flagged_count",
+     "accounts_count",
+     "round_trips_count",
+     "cleaning"
+    ],
+    "title": "CaseStatsOut"
+   },
+   "ColumnTemplateIn": {
+    "properties": {
+     "bank_name": {
+      "type": "string",
+      "title": "Bank Name"
+     },
+     "mapping": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object",
+      "title": "Mapping"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bank_name",
+     "mapping"
+    ],
+    "title": "ColumnTemplateIn",
+    "description": "Frontend mapping shape: column index -> canonical field name."
+   },
+   "DocumentColumn": {
+    "properties": {
+     "index": {
+      "type": "integer",
+      "title": "Index"
+     },
+     "header": {
+      "type": "string",
+      "title": "Header"
+     },
+     "samples": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Samples"
+     }
+    },
+    "type": "object",
+    "required": [
+     "index",
+     "header",
+     "samples"
+    ],
+    "title": "DocumentColumn"
+   },
+   "DocumentColumnsOut": {
+    "properties": {
+     "document_id": {
+      "type": "string",
+      "title": "Document Id"
+     },
+     "filename": {
+      "type": "string",
+      "title": "Filename"
+     },
+     "bank_hint": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bank Hint"
+     },
+     "columns": {
+      "items": {
+       "$ref": "#/components/schemas/DocumentColumn"
+      },
+      "type": "array",
+      "title": "Columns"
+     }
+    },
+    "type": "object",
+    "required": [
+     "document_id",
+     "filename",
+     "bank_hint",
+     "columns"
+    ],
+    "title": "DocumentColumnsOut",
+    "description": "Raw extracted grid of an unparseable document, for the mapping UI."
+   },
    "DocumentOut": {
     "properties": {
      "id": {
@@ -1000,6 +1266,69 @@
     ],
     "title": "Page[TransactionOut]"
    },
+   "ReviewCorrections": {
+    "properties": {
+     "txn_date": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Txn Date"
+     },
+     "amount_inr": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount Inr"
+     },
+     "direction": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^(DEBIT|CREDIT)$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction"
+     },
+     "narration_raw": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Narration Raw"
+     },
+     "channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Channel"
+     }
+    },
+    "type": "object",
+    "title": "ReviewCorrections"
+   },
    "TransactionOut": {
     "properties": {
      "id": {
@@ -1143,6 +1472,16 @@
       "pattern": "^(confirm|correct|exclude)$",
       "title": "Action"
      },
+     "corrections": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ReviewCorrections"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "txn_date": {
       "anyOf": [
        {
@@ -1206,7 +1545,7 @@
      "action"
     ],
     "title": "TransactionReview",
-    "description": "Officer review action on a low-confidence/flagged row."
+    "description": "Officer review action on a low-confidence/flagged row.\n\nCorrections may come flat (contract v2) or nested under `corrections`\n(frontend ReviewAction shape) \u2014 both accepted."
    },
    "UploadOut": {
     "properties": {

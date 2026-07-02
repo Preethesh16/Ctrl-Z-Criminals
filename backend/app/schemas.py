@@ -94,16 +94,72 @@ class TransactionOut(BaseModel):
     excluded: bool
 
 
-class TransactionReview(BaseModel):
-    """Officer review action on a low-confidence/flagged row."""
-
-    action: str = Field(pattern="^(confirm|correct|exclude)$")
-    # for action=correct — only provided fields are changed:
+class ReviewCorrections(BaseModel):
     txn_date: date | None = None
     amount_inr: str | None = None
     direction: str | None = Field(default=None, pattern="^(DEBIT|CREDIT)$")
     narration_raw: str | None = None
     channel: str | None = None
+
+
+class TransactionReview(BaseModel):
+    """Officer review action on a low-confidence/flagged row.
+
+    Corrections may come flat (contract v2) or nested under `corrections`
+    (frontend ReviewAction shape) — both accepted.
+    """
+
+    action: str = Field(pattern="^(confirm|correct|exclude)$")
+    corrections: ReviewCorrections | None = None
+    # flat variants of the same fields:
+    txn_date: date | None = None
+    amount_inr: str | None = None
+    direction: str | None = Field(default=None, pattern="^(DEBIT|CREDIT)$")
+    narration_raw: str | None = None
+    channel: str | None = None
+
+    def merged(self) -> "ReviewCorrections":
+        nested = self.corrections or ReviewCorrections()
+        return ReviewCorrections(
+            txn_date=self.txn_date or nested.txn_date,
+            amount_inr=self.amount_inr or nested.amount_inr,
+            direction=self.direction or nested.direction,
+            narration_raw=self.narration_raw or nested.narration_raw,
+            channel=self.channel or nested.channel,
+        )
+
+
+class DocumentColumn(BaseModel):
+    index: int
+    header: str
+    samples: list[str]
+
+
+class DocumentColumnsOut(BaseModel):
+    """Raw extracted grid of an unparseable document, for the mapping UI."""
+
+    document_id: str
+    filename: str
+    bank_hint: str | None
+    columns: list[DocumentColumn]
+
+
+class ColumnTemplateIn(BaseModel):
+    """Frontend mapping shape: column index -> canonical field name."""
+
+    bank_name: str
+    mapping: dict[int, str]  # values: txn_date|narration|reference_id|debit|credit|amount_signed|balance|ignore
+
+
+class CaseStatsOut(BaseModel):
+    case_id: str
+    documents_count: int
+    transactions_count: int
+    needs_review_count: int
+    flagged_count: int
+    accounts_count: int
+    round_trips_count: int
+    cleaning: dict
 
 
 class BankTemplateIn(BaseModel):

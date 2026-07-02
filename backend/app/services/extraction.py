@@ -10,7 +10,31 @@ from ..config import get_settings
 from ..ingest.router import UnsupportedFormat, extract_rows
 from ..models import AuditLog, Document, Job, Transaction
 
-PARSER_VERSION = "p1.0"
+PARSER_VERSION = "p2.0"
+
+
+def _retry_with_saved_template(db: Session, stored_path: str, info: dict):
+    """Zero rows extracted: try officer-saved bank templates by header signature."""
+    from sqlalchemy import select
+
+    from ..ingest.columns import score_header_row
+    from ..ingest.router import UnsupportedFormat, read_any_grid
+    from ..models import BankTemplate
+
+    try:
+        grid, _ = read_any_grid(stored_path)
+    except (UnsupportedFormat, Exception):
+        return [], info
+    if not grid:
+        return [], info
+    header_idx = max(range(min(45, len(grid))), key=lambda i: score_header_row(grid[i]))
+    signature = "|".join(str(c).strip().lower() for c in grid[header_idx])
+    template = db.scalar(select(BankTemplate).where(BankTemplate.header_signature == signature))
+    if template is None:
+        return [], info
+    txns, tinfo = extract_rows(stored_path, mapping_override=dict(template.mapping))
+    tinfo["template_used"] = template.name
+    return txns, {**info, **tinfo}
 
 
 def sha256_file(path: str | Path) -> str:
@@ -21,8 +45,13 @@ def sha256_file(path: str | Path) -> str:
     return h.hexdigest()
 
 
-def process_document(db: Session, document_id: str, stored_path: str, job_id: str) -> None:
-    """Background task: parse one uploaded statement into canonical transactions."""
+def process_document(db: Session, document_id: str, stored_path: str, job_id: str,
+                     mapping_override: dict | None = None) -> None:
+    """Background task: parse one uploaded statement into canonical transactions.
+
+    `mapping_override` comes from an officer-applied column template
+    (special key `__header_row__` carries the header position).
+    """
     settings = get_settings()
     doc = db.get(Document, document_id)
     job = db.get(Job, job_id)
@@ -34,7 +63,13 @@ def process_document(db: Session, document_id: str, stored_path: str, job_id: st
     db.commit()
 
     try:
-        txns, info = extract_rows(stored_path)
+        if mapping_override is not None:
+            override = {k: v for k, v in mapping_override.items() if k != "__header_row__"}
+            txns, info = extract_rows(stored_path, mapping_override=override)
+        else:
+            txns, info = extract_rows(stored_path)
+            if not txns:
+                txns, info = _retry_with_saved_template(db, stored_path, info)
     except UnsupportedFormat as e:
         doc.status, doc.error = "failed", str(e)
         job.status, job.detail = "failed", str(e)

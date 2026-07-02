@@ -99,13 +99,27 @@ def _cell(row: list, mapping: dict[str, int], f: str):
     return row[idx]
 
 
-def grid_to_txns(grid: list[list], base_confidence: float = 1.0) -> tuple[list[RawTxn], dict]:
+def grid_to_txns(
+    grid: list[list],
+    base_confidence: float = 1.0,
+    mapping_override: dict[str, int] | None = None,
+    header_row_override: int | None = None,
+) -> tuple[list[RawTxn], dict]:
     """Convert a raw cell grid to canonical raw transactions.
 
+    `mapping_override` (canonical field -> column index) comes from an
+    officer-saved bank template and bypasses header auto-detection.
     Returns (txns, info) where info reports header position, mapping and
     skipped-row counts for the audit trail.
     """
-    header_idx, mapping = find_header(grid)
+    if mapping_override is not None:
+        header_idx, mapping = header_row_override, dict(mapping_override)
+        if header_idx is None:
+            header_idx, _ = find_header(grid)
+            if header_idx is None:
+                header_idx = -1  # no header row — data starts at 0
+    else:
+        header_idx, mapping = find_header(grid)
     info = {"header_row": header_idx, "mapping": mapping, "skipped": 0, "carried_narration": 0}
     if header_idx is None:
         return [], info

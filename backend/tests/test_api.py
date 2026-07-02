@@ -76,6 +76,48 @@ def test_review_flow():
     assert set(r.json()) == {"transactions", "balance_breaks", "duplicate_pairs", "reversal_pairs"}
 
 
+def test_stats_columns_and_template_flow():
+    r = client.post("/cases", json={"fir_number": "TEST-0003/2026"})
+    case_id = r.json()["id"]
+    up = client.post(f"/cases/{case_id}/uploads",
+                     files={"file": ("s3.csv", io.BytesIO(CSV), "text/csv")}).json()
+
+    # stats in B's CaseStats shape
+    stats = client.get(f"/cases/{case_id}/stats").json()
+    assert stats["transactions_count"] == 2
+    assert stats["documents_count"] == 1
+    assert set(stats["cleaning"]) == {"duplicates_flagged", "reversals_detected", "balance_breaks"}
+
+    # columns for the mapping UI
+    cols = client.get(f"/documents/{up['document_id']}/columns").json()
+    headers = [c["header"] for c in cols["columns"]]
+    assert "TRAN-DATE" in headers and "BALANCE" in headers
+    assert any(c["samples"] for c in cols["columns"])
+
+    # apply an officer template (B's index->field shape) → re-parse
+    r = client.post(f"/documents/{up['document_id']}/template", json={
+        "bank_name": "Finacle Generic",
+        "mapping": {"0": "txn_date", "1": "narration", "3": "debit", "4": "credit", "5": "balance"},
+    })
+    assert r.status_code == 200, r.text
+    job = client.get(f"/jobs/{r.json()['id']}").json()
+    assert job["status"] == "done", job
+    assert job["transactions_found"] == 2
+    assert any(t["name"] == "Finacle Generic" for t in client.get("/templates").json())
+
+
+def test_review_nested_corrections_shape():
+    r = client.post("/cases", json={"fir_number": "TEST-0004/2026"})
+    case_id = r.json()["id"]
+    client.post(f"/cases/{case_id}/uploads",
+                files={"file": ("s4.csv", io.BytesIO(CSV), "text/csv")})
+    txn = client.get(f"/cases/{case_id}/transactions").json()["items"][0]
+    r = client.post(f"/transactions/{txn['id']}/review",
+                    json={"action": "correct", "corrections": {"direction": "DEBIT"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["direction"] == "DEBIT"
+
+
 def test_template_save_and_upsert():
     body = {"name": "PNB ledger", "bank": "PNB",
             "header_signature": "trans dt|particulars|debit|credit|balance",
