@@ -38,6 +38,7 @@ def process_document(db: Session, document_id: str, stored_path: str, job_id: st
     except UnsupportedFormat as e:
         doc.status, doc.error = "failed", str(e)
         job.status, job.detail = "failed", str(e)
+        job.error_code = "UNSUPPORTED_FORMAT"
         db.add(AuditLog(case_id=doc.case_id, action="parse_failed",
                         detail={"document": doc.filename, "reason": str(e)}))
         db.commit()
@@ -45,6 +46,7 @@ def process_document(db: Session, document_id: str, stored_path: str, job_id: st
     except Exception as e:  # noqa: BLE001 — job must record any parser crash
         doc.status, doc.error = "failed", f"{type(e).__name__}: {e}"
         job.status, job.detail = "failed", doc.error
+        job.error_code = "PASSWORD_PROTECTED" if "password" in str(e).lower() else "PARSE_FAILED"
         db.add(AuditLog(case_id=doc.case_id, action="parse_error",
                         detail={"document": doc.filename, "error": doc.error}))
         db.commit()
@@ -87,6 +89,7 @@ def process_document(db: Session, document_id: str, stored_path: str, job_id: st
     doc.status = "parsed"
     job.status, job.progress = "done", 100
     job.detail = f"{len(txns)} transactions"
+    job.transactions_found = len(txns)
     db.add(AuditLog(case_id=doc.case_id, action="parsed", detail={
         "document": doc.filename, "sha256": doc.sha256, "parser": PARSER_VERSION,
         "rows": len(txns), "mode": info.get("extraction_mode"),

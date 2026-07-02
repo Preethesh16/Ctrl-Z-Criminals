@@ -54,9 +54,21 @@ class JobOut(BaseModel):
     id: str
     case_id: str
     kind: str
+    document_id: str | None
     status: str
-    progress: int
+    progress: int  # 0-100
     detail: str | None
+    error_code: str | None
+    transactions_found: int | None
+
+
+class UploadOut(BaseModel):
+    """Response to a document upload: everything needed to poll and display."""
+
+    document_id: str
+    job_id: str
+    filename: str
+    sha256: str
 
 
 class TransactionOut(BaseModel):
@@ -80,6 +92,32 @@ class TransactionOut(BaseModel):
     extraction_confidence: float
     needs_review: bool
     excluded: bool
+
+
+class TransactionReview(BaseModel):
+    """Officer review action on a low-confidence/flagged row."""
+
+    action: str = Field(pattern="^(confirm|correct|exclude)$")
+    # for action=correct — only provided fields are changed:
+    txn_date: date | None = None
+    amount_inr: str | None = None
+    direction: str | None = Field(default=None, pattern="^(DEBIT|CREDIT)$")
+    narration_raw: str | None = None
+    channel: str | None = None
+
+
+class BankTemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    bank: str | None = None
+    header_signature: str = Field(min_length=1)
+    mapping: dict[str, int]
+
+
+class BankTemplateOut(BankTemplateIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
 
 
 class Page[T](BaseModel):

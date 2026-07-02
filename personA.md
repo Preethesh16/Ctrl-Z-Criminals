@@ -9,6 +9,7 @@
 - **Working setup**: `backend/.venv` (Python 3.14), deps in `backend/requirements.txt`, run tests with `cd backend && .venv/bin/python -m pytest -q`
 - **Real-data harness**: `backend/tools/validate_dataset.py` — runs extractor over the confidential `Bank-statements-dataset/` (local only, never committed) and prints aggregate stats
 - **Real-data coverage**: **151/162 files (93.2%), 182,515 transactions, 0 crashes** (validation round 3)
+- **Integration state**: Deepthi's Phase-1 frontend merged from main (PR #1). API contract v2 shipped — upload returns `{document_id, job_id, filename, sha256}`, `/uploads` path alias, job `error_code`/`transactions_found`, `POST /cases/{id}/clean`. Her remaining type reconciliation items are listed in progress.md "Deviations" — her lane.
 - **Next up (Phase 2)**: the 11 remaining zero-row files — fixed-width TXT parser (NITIN/shivlal, Kerala Gramin), PNB "Customer Account Ledger" dash-table layout (DEVANSHU, KOMAL), BOM_Statement FTP layout, `STATEMENT 1026*.pdf`, `4513362998.pdf`, `8642666611469255.pdf`; then balance-consistency check, cleaning suite, OCR pipeline, review-queue API
 
 ## Key dataset intelligence (from recon of the real police data — 2026-07-02)
@@ -30,6 +31,42 @@
 - `tests/` — 17 unit tests green (normalize + rows)
 
 ## Log
+
+### 2026-07-02 — Session 4: Checkpoint 1 passed; OCR + DOCX + templates
+- Pulled main: Deepthi reconciled the API layer to the contract and **verified Checkpoint 1 end-to-end** (UI → /api proxy → FastAPI → 47 txns). Phase 1 fully closed.
+- **OCR pipeline** (`ingest/ocr.py`, `ocr_preprocess.py`): pdf2image rasterize → OpenCV deskew/denoise/adaptive-threshold → pluggable engine (PaddleOCR if installed, else Tesseract via pytesseract) → OCR lines with confidence → same `_LINE` regex path as digital PDFs → per-line OCR confidence blended into row confidence → direction repair. Scanned PDFs and photo uploads route through it. ⚠ validation blocked: `tesseract` binary not installed yet on this machine (`sudo pacman -S tesseract tesseract-data-eng`); golden test auto-skips.
+- **DOCX parser** (`ingest/docxfile.py`): tables → grid, paragraphs → header meta.
+- **statement-forge v2**: mule6 now DOCX, mule8 a 200-DPI image-only scanned PDF (exercises OCR); stale-output cleanup; DOCX round-trip green in golden tests.
+- **Saved-template API**: `BankTemplate` model + GET/POST `/templates` (upsert by normalized header signature) — backend for Deepthi's column-mapping UI. Auto-application at parse time still TODO (bank-templates task).
+- Tests: 38 passing. Contract regenerated. New deps: pdf2image, opencv-python-headless, pytesseract, python-docx.
+- Next: template auto-application; 4 stubborn PDF layouts; then Phase 3 detection.
+
+### 2026-07-02 — Session 4b: OCR validated end-to-end
+- Tesseract was present all along (`/usr/bin/tesseract`; earlier sandbox PATH check lied). Golden scanned-PDF test initially failed — two real bugs found:
+  1. PIL writes image-PDFs with no DPI ⇒ pdf2image re-render exploded to 9746×6892 px and Tesseract collapsed. Fix: `resolution=200` in forge writer + defensive 3600px cap in `ocr_image` (protects against phone photos too).
+  2. Ruled table grid lines wreck Tesseract line segmentation (table OCR'd as one garbage line). Fix: morphology-based `remove_table_rules()` (open with 60px h/v kernels, paint white); also dropped the adaptive threshold — measured worse than Tesseract's internal Otsu on clean scans.
+- After fixes: scanned statement OCRs cleanly (`09-05-2026 POS ... 1567.00 11249.00`), full suite 38/38 with the OCR golden test actually executing.
+
+### 2026-07-02 — Session 3: direction repair + statement-forge + review API
+- Balance audit round 1 exposed a systematic bug: `pdf_text_regex` fallback dropped credit rows (`0.00 | 500.00 | bal` → amount 0 → skipped) and guessed all directions as DEBIT. Fixes:
+  - fallback now emits 5-col rows keeping BOTH amount columns;
+  - new `rows.repair_directions()` uses running-balance deltas as ground truth to correct DEBIT/CREDIT (handles newest-first statements); applied to all regex-fallback extractions.
+- Built `tools/statement-forge/forge.py`: deterministic synthetic fraud case — victim + 8 mules, 4 banks, 5 formats (reportlab PDF, Finacle CSV, XLSX, HTML-disguised .xls, fixed-width TXT), planted smurfing (6×<50k), layering, time-ordered ROUND TRIP (m3→m4→m5→m1), ~40% ATM cash-out at odd hours, one reversed IMPS — with `case_manifest.json` ground truth. Bug found & fixed en route: balances must be computed AFTER time-sorting events, not in call order.
+- Golden tests: all forge formats extract (≥90% row recovery), planted RRNs found on both legs, all balances reconcile. New deps: reportlab, lxml. pandas `read_html` fixes: StringIO wrapper + re-adding `<th>` header row.
+- Review-queue API: `POST /transactions/{id}/review` (confirm/correct/exclude, per-field audit of corrections, confidence→1.0 officer-verified). Contract regenerated.
+- Tests: 37 passing.
+- **Balance audit after repair** (121 real docs with balance chains): perfect 78→**88**, with-breaks 43→**33**; STATEMENT (3)/(6)-class files fell from 33.9% to ≤3% break rate. Remaining stubborn: `Statement 57856891688032*.pdf`, `soa_0167042251865512.pdf`, `45170 stmt.pdf` (~95-98% breaks — regex fallback misreads their column order entirely; needs a per-layout look, Phase 2). FD-07 on real data now measures statements, not our parser.
+
+### 2026-07-02 — Session 2: Person B merge + contract v2 + cleaning suite (Phase 2 started)
+- Merged `origin/main` (Deepthi's Phase-1 frontend, PR #1) into `person-a/p1-foundation`.
+- Audited her provisional `frontend/src/api/types.ts` against the real API — found 6 contract mismatches. Adopted her better designs on the backend (richer upload response, `/uploads` alias, job error codes + transactions_found); documented the 5 frontend-side diffs in progress.md Deviations with @Deepthi tag.
+- Built the cleaning suite (`app/cleaning/`):
+  - `balance_check.py` — FD-07 running-balance validation, auto-detects newest-first statements, restart-on-gap chains.
+  - `dedup.py` — cross-document exact (same ref) + fuzzy (narration ≥0.9) duplicates; flag-only, never delete.
+  - `failed_txn.py` — reversal pairing (marker regex or same reference, 5-day window, one pair per leg); paired legs excluded from flow analysis.
+  - `services/cleaning.py` — idempotent case-level pass exposed at `POST /cases/{id}/clean`, audit-logged.
+- Tests: 32 passing (12 new cleaning tests). Regenerated `openapi.json`.
+- Balance audit over real dataset: results below.
 
 ### 2026-07-02 — Session 1: recon + extraction core + API (Phase 1 complete for lane A)
 - Created branch `person-a/p1-foundation`.

@@ -37,16 +37,19 @@
 ## Phase 2 — Full Ingestion & Cleaning
 
 ### Person A
-- [ ] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/threshold) + PaddleOCR primary + Tesseract cross-check confidence
-- [ ] DOCX parser (python-docx tables) and image/photo parser
+- [x] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/**table-rule removal**) + pluggable PaddleOCR/Tesseract engines, per-line confidence → row confidence (done: 2026-07-02, A)
+  > validated: scanned-PDF golden test green end-to-end (rasterize → preprocess → Tesseract → line parse → direction repair)
+- [x] DOCX parser (python-docx tables) and image/photo parser (done: 2026-07-02, A)
 - [ ] docling fallback for digital PDFs when balance reconciliation fails
-- [ ] Per-row extraction_confidence; review-queue API (confirm/correct/exclude)
-- [ ] Cleaning: exact + fuzzy duplicate detection (flagged, never silently deleted)
-- [ ] Cleaning: failed/reversed transaction pairing (REV/RET/REFUND/same-ref)
-- [ ] Cleaning: running-balance consistency check (FD-07 flag on break)
+- [x] Per-row extraction_confidence; review-queue API (confirm/correct/exclude) (done: 2026-07-02, A)
+- [x] Cleaning: exact + fuzzy duplicate detection (flagged, never silently deleted) (done: 2026-07-02, A)
+- [x] Cleaning: failed/reversed transaction pairing (REV/RET/REFUND/same-ref) (done: 2026-07-02, A)
+- [x] Cleaning: running-balance consistency check (FD-07 flag on break) (done: 2026-07-02, A)
 - [ ] Bank templates: SBI, HDFC, ICICI, Axis, Kotak, Canara, PNB, BoB
-- [ ] `tools/statement-forge/`: synthetic fraud case generator — 6 formats, planted round trip, smurfing, 40% cash-out, one reversal
-- [ ] Saved-template API for the column-mapping UI
+- [x] `tools/statement-forge/`: synthetic fraud case generator — 9 accounts / 5 formats (PDF, CSV, XLSX, HTML-xls, TXT), planted round trip + smurfing + cash-out + reversal, ground-truth manifest, golden round-trip tests (done: 2026-07-02, A)
+  > note: scanned-PDF + DOCX forge outputs land with the Phase-2 OCR/DOCX parsers
+- [x] Saved-template API for the column-mapping UI — GET/POST `/templates`, upsert by header signature (done: 2026-07-02, A)
+  > note: template auto-application at parse time (unmapped grid → match saved signature) lands with the bank-templates task
 
 ### Person B
 - [x] Review queue UI: low-confidence rows + suspected duplicates, big accept/fix/exclude buttons (done: 2026-07-02, B)
@@ -112,3 +115,18 @@
 ## Deviations / notes
 
 _(Record any deviation from plan.md here, with date and reason.)_
+
+### 2026-07-02 (A) — API contract v2 after reconciling with Person B's provisional types
+
+**@Deepthi — action needed.** I adopted your better ideas into the backend; `backend/openapi.json` is regenerated and is now the single source of truth. Backend changes (already live):
+- Upload response is now your `UploadResult` shape: `{document_id, job_id, filename, sha256}`.
+- `POST /cases/{id}/uploads` works as an alias of `/documents` — your client path needs no change.
+- `Job` now carries `document_id`, `error_code` (`PASSWORD_PROTECTED|UNSUPPORTED_FORMAT|PARSE_FAILED`) and `transactions_found`.
+- New: `POST /cases/{id}/clean` → `{transactions, balance_breaks, duplicate_pairs, reversal_pairs}` for your Phase-2 dashboard cleaning stats.
+
+Frontend-side diffs still to reconcile in `frontend/src/api/types.ts` (your lane):
+1. **Money is decimal STRING, not paise int**: `fraud_amount`, `amount_inr` ("50000.00"), `balance_after`. Transaction has `amount_inr` + `direction: "DEBIT"|"CREDIT"` — not `debit_paise`/`credit_paise`.
+2. `GET /cases/{id}/transactions` returns `{items, total, offset, limit}` page — not a bare array (145k+ rows in real cases; use `offset`/`limit`, filter `needs_review=true` for the review queue).
+3. `Job.progress` is **0–100**, not 0..1. `DUPLICATE_FILE` is not a job error: duplicate upload fails fast with HTTP **409** on the upload call itself.
+4. Field names: `narration_raw` (not `narration`), `document_id` (not `source_document_id`), case has `complaint_date` (not `incident_date`), no `status`/counts on Case yet (counts live on `GET /cases/{id}/documents` as `txn_count`).
+5. `channel` enum: `UPI|NEFT|IMPS|RTGS|ATM|CHEQUE|CASH|POS|INTERNAL|UNKNOWN` (not `OTHER`).
