@@ -40,6 +40,7 @@
 - Golden tests: all forge formats extract (≥90% row recovery), planted RRNs found on both legs, all balances reconcile. New deps: reportlab, lxml. pandas `read_html` fixes: StringIO wrapper + re-adding `<th>` header row.
 - Review-queue API: `POST /transactions/{id}/review` (confirm/correct/exclude, per-field audit of corrections, confidence→1.0 officer-verified). Contract regenerated.
 - Tests: 37 passing.
+- **Balance audit after repair** (121 real docs with balance chains): perfect 78→**88**, with-breaks 43→**33**; STATEMENT (3)/(6)-class files fell from 33.9% to ≤3% break rate. Remaining stubborn: `Statement 57856891688032*.pdf`, `soa_0167042251865512.pdf`, `45170 stmt.pdf` (~95-98% breaks — regex fallback misreads their column order entirely; needs a per-layout look, Phase 2). FD-07 on real data now measures statements, not our parser.
 
 ### 2026-07-02 — Session 2: Person B merge + contract v2 + cleaning suite (Phase 2 started)
 - Merged `origin/main` (Deepthi's Phase-1 frontend, PR #1) into `person-a/p1-foundation`.
