@@ -32,6 +32,17 @@
 
 ## Log
 
+### 2026-07-02 — Session 6: merges + Phase 4 exports (3 of 5 lane-A tasks)
+- Merged: origin/main → p3 branch; p3 → main; B's `person-b/p2-real-wiring` → main (her Checkpoint-2 verification: 8 formats, reversal caught, review flow green against real API). main `813889f` carries both lanes; 60/60 green post-merge. New branch `person-a/p4-reports`.
+- **Reporting** (`app/reporting/`): one Jinja2 context builder feeds every output (preview and court PDF can never diverge).
+  - `GET /cases/{id}/report/preview` — HTML investigation report (same template as PDF) for B's report page.
+  - `GET /cases/{id}/export/report.pdf` — WeasyPrint: case header, evidence chain with SHA-256 per document, cleaning summary, round-trip loops with edge evidence, disposition table, common identifiers, flagged txns with rule chips + why-lines, legal clause mapping (PMLA/BNS/IT Act/BSA), audit trail. Page footers mark CONFIDENTIAL + page numbers.
+  - `GET /cases/{id}/export/standardized.pdf` — mentor req 3: every source format as ONE uniform table (Date|Narration|Ref|Debit|Credit|Balance|Channel) per document with hashes.
+  - `GET /cases/{id}/export/case.xlsx` — 6 sheets: Transactions, Flags, Round Trips, Accounts, Disposition, Audit.
+  - Exports are audit-logged (who exported what, when — chain of custody).
+- Golden exports test: forge case → analyze → HTML contains loop-1 + FIR; both PDFs valid; workbook sheet structure + row counts asserted. **64/64 tests.** Contract regenerated (23 paths).
+- Remaining lane-A: LLM assist (flagged off), API hardening; P2 stragglers (docling fallback, 4 stubborn real PDFs). B's Phase 3/4: viz pages + report page + Docker.
+
 ### 2026-07-02 — Session 5: DETECTION ENGINE COMPLETE (all Phase 3 lane-A tasks)
 - Branch `person-a/p3-detection` (main was merged first; Checkpoint 1 landed via B's PR #2).
 - Reconciled B's provisional endpoints for real: `GET /cases/{id}/stats` (her CaseStats shape), `GET /documents/{id}/columns`, `POST /documents/{id}/template` (her index→field mapping; saves BankTemplate; re-parses), saved-template auto-retry on zero-row parses, review accepts nested `corrections`.

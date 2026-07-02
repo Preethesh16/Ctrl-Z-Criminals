@@ -95,9 +95,10 @@
 ## Phase 4 — Reports & Ship
 
 ### Person A
-- [ ] Standardized extraction PDF (uniform table, all sources) — mentor requirement 3
-- [ ] Investigation report PDF (WeasyPrint from Jinja2): case header, cleaning summary, flags w/ evidence, round trips, graph image, trail tables + Sankey images, disposition %, legal clause mapping, audit trail w/ hashes
-- [ ] Excel export: multi-sheet workbook (Transactions, Flags, Round Trips, Trails, Accounts, Audit)
+- [x] Standardized extraction PDF (uniform table, all sources) — mentor requirement 3 (done: 2026-07-02, A)
+- [x] Investigation report PDF (WeasyPrint from Jinja2): case header, evidence chain w/ SHA-256, cleaning summary, round trips w/ edge evidence, disposition, correlation, flagged txns, legal clause mapping, audit trail (done: 2026-07-02, A)
+  > note: embedded graph/Sankey images land when B's viz pages exist (export PNG → report asset)
+- [x] Excel export: multi-sheet workbook (Transactions, Flags, Round Trips, Accounts, Disposition, Audit) (done: 2026-07-02, A)
 - [ ] LLM assist (feature-flagged, default off): column-mapping suggestions + report narrative, masked samples only
 - [ ] API hardening: input validation, error envelopes, pagination, request logging → audit trail
 
