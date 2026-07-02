@@ -38,6 +38,19 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    """Never leak stack traces to the client; keep the envelope consistent."""
+    import logging
+
+    from fastapi.responses import JSONResponse
+
+    logging.getLogger("tracenet").exception("unhandled error on %s %s",
+                                            request.method, request.url.path)
+    return JSONResponse(status_code=500,
+                        content={"detail": "internal error — see server logs"})
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -88,12 +101,17 @@ async def upload_document(
         raise HTTPException(404, "case not found")
 
     content = await file.read()
+    if not content:
+        raise HTTPException(422, "empty file")
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(413, f"file exceeds {settings.max_upload_mb} MB")
 
     upload_dir = Path(settings.upload_dir) / case_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    stored = upload_dir / (file.filename or "statement.bin")
+    # sanitize: basename only — a crafted filename like ../../etc/x must not
+    # escape the case directory
+    safe_name = Path(file.filename or "statement.bin").name.replace("\x00", "") or "statement.bin"
+    stored = upload_dir / safe_name
     stored.write_bytes(content)
 
     digest = sha256_file(stored)
@@ -103,7 +121,7 @@ async def upload_document(
 
     doc = Document(
         case_id=case_id,
-        filename=file.filename or "statement.bin",
+        filename=safe_name,
         sha256=digest,
         file_kind=detect_file_kind(stored, content[:4096]),
     )

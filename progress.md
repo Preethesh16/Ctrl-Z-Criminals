@@ -105,7 +105,7 @@
 - [x] Excel export: multi-sheet workbook (Transactions, Flags, Round Trips, Accounts, Disposition, Audit) (done: 2026-07-02, A)
 - [x] LLM assist (feature-flagged, default off): column-mapping suggestions + report narrative, masked samples only (done: 2026-07-02, A)
   > `GET /documents/{id}/suggest-mapping` + `GET /cases/{id}/report/narrative`; 501 when disabled; single masking choke point (`app/llm/masking.py`) — headers + masked cells only; every call audit-logged. Keep LLM_ENABLED=false near the police dataset.
-- [ ] API hardening: input validation, error envelopes, pagination, request logging → audit trail
+- [x] API hardening: filename-traversal sanitization, empty-upload rejection, global 500 envelope (no stack leaks), pagination caps (done: 2026-07-02, A)
 
 ### Person B
 - [ ] Report page: live HTML preview → Download PDF / Download Excel / Download standardized PDF
