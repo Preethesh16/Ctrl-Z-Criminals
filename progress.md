@@ -21,10 +21,12 @@
 
 ### Person B
 - [x] Frontend scaffold: Vite + React 18 + TS + Tailwind v4 + framer-motion + design-token theme & motion presets (done: 2026-07-02, setup)
-- [ ] Typed API client generated from OpenAPI contract + mock fixtures fallback
-- [ ] Cases list page + New Case form (FIR no., complainant, fraud amount)
-- [ ] Case wizard shell (Upload → Review → Analyze steps)
-- [ ] Upload dropzone: multi-file, per-file progress via job polling, "N transactions found" result
+- [x] Typed API client generated from OpenAPI contract + mock fixtures fallback (done: 2026-07-01, B)
+  > note: types are hand-written from plan.md §4.1 (`frontend/src/api/types.ts`) since the OpenAPI contract isn't published yet; regenerate + reconcile when Person A ships it. Mock adapter is default; `VITE_API_MODE=real` flips to the FastAPI proxy.
+- [x] Cases list page + New Case form (FIR no., complainant, fraud amount) (done: 2026-07-01, B)
+- [x] Case wizard shell (Upload → Review → Analyze steps) (done: 2026-07-01, B)
+- [x] Upload dropzone: multi-file, per-file progress via job polling, "N transactions found" result (done: 2026-07-01, B)
+  > note: verified against mocks incl. failure states (password-protected, duplicate hash, unsupported format); real-API pass pending Person A's Phase-1 endpoints.
 
 ### ✅ Checkpoint 1 (merge to main)
 - [ ] Upload a digital PDF through the UI → parsed transactions appear from the real API
