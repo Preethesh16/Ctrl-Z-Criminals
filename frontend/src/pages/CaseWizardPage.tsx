@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { Case, Transaction } from '../api/types'
+import type { CaseOut, Page, TransactionOut } from '../api/types'
 import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -12,16 +12,18 @@ import { fadeIn, staggerContainer } from '../theme/motion'
 const STEPS = ['Upload', 'Review', 'Analyze'] as const
 type Step = (typeof STEPS)[number]
 
+const PAGE_SIZE = 200
+
 export function CaseWizardPage() {
   const { caseId = '' } = useParams()
-  const [caseData, setCaseData] = useState<Case | null>(null)
+  const [caseData, setCaseData] = useState<CaseOut | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [step, setStep] = useState<Step>('Upload')
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [txnPage, setTxnPage] = useState<Page<TransactionOut> | null>(null)
 
   const refresh = useCallback(() => {
     api.getCase(caseId).then(setCaseData).catch(() => setNotFound(true))
-    api.listTransactions(caseId).then(setTransactions).catch(() => {})
+    api.listTransactions(caseId, { limit: PAGE_SIZE }).then(setTxnPage).catch(() => {})
   }, [caseId])
 
   useEffect(refresh, [refresh])
@@ -39,6 +41,8 @@ export function CaseWizardPage() {
     )
   }
 
+  const totalTxns = txnPage?.total ?? 0
+
   return (
     <motion.div variants={staggerContainer} initial="hidden" animate="visible">
       <motion.header variants={fadeIn} className="mb-6">
@@ -50,7 +54,8 @@ export function CaseWizardPage() {
         </h1>
         {caseData && (
           <p className="text-body text-text-secondary mt-1">
-            {caseData.complainant} · reported loss {formatINR(caseData.fraud_amount_paise)}
+            {caseData.complainant ?? 'Complainant not recorded'}
+            {caseData.fraud_amount && ` · reported loss ${formatINR(caseData.fraud_amount)}`}
           </p>
         )}
       </motion.header>
@@ -77,10 +82,10 @@ export function CaseWizardPage() {
       {step === 'Upload' && (
         <motion.div variants={fadeIn}>
           <UploadDropzone caseId={caseId} onTransactionsAdded={refresh} />
-          {transactions.length > 0 && (
+          {totalTxns > 0 && (
             <div className="mt-6 flex items-center justify-between">
               <p className="text-body text-text-secondary">
-                {transactions.length} transactions read so far.
+                {totalTxns} transactions read so far.
               </p>
               <Button onClick={() => setStep('Review')}>Next: Review →</Button>
             </div>
@@ -88,9 +93,7 @@ export function CaseWizardPage() {
         </motion.div>
       )}
 
-      {step === 'Review' && (
-        <ReviewStep transactions={transactions} onNext={() => setStep('Analyze')} />
-      )}
+      {step === 'Review' && <ReviewStep page={txnPage} onNext={() => setStep('Analyze')} />}
 
       {step === 'Analyze' && (
         <Card className="max-w-xl">
@@ -108,20 +111,14 @@ export function CaseWizardPage() {
   )
 }
 
-const LOW_CONFIDENCE_THRESHOLD = 0.7
-
 function ReviewStep({
-  transactions,
+  page,
   onNext,
 }: {
-  transactions: Transaction[]
+  page: Page<TransactionOut> | null
   onNext: () => void
 }) {
-  const lowConfidence = transactions.filter(
-    (t) => t.extraction_confidence < LOW_CONFIDENCE_THRESHOLD,
-  )
-
-  if (transactions.length === 0) {
+  if (!page || page.total === 0) {
     return (
       <Card className="max-w-xl">
         <p className="text-body text-text-secondary">
@@ -131,15 +128,17 @@ function ReviewStep({
     )
   }
 
+  const reviewCount = page.items.filter((t) => t.needs_review).length
+
   return (
     <motion.div variants={fadeIn} initial="hidden" animate="visible">
       <div className="mb-4 flex items-center justify-between">
         <p className="text-body text-text-secondary">
-          {transactions.length} transactions read.{' '}
-          {lowConfidence.length > 0 ? (
+          {page.total} transactions read.{' '}
+          {reviewCount > 0 ? (
             <span className="text-warning font-medium">
-              {lowConfidence.length} rows were hard to read and are highlighted — full
-              review-and-fix arrives in Phase 2.
+              {reviewCount} rows were hard to read and are highlighted — full review-and-fix
+              arrives in Phase 2.
             </span>
           ) : (
             'All rows were read with high confidence.'
@@ -167,40 +166,38 @@ function ReviewStep({
             </tr>
           </thead>
           <tbody>
-            {transactions.slice(0, 200).map((t) => {
-              const isLow = t.extraction_confidence < LOW_CONFIDENCE_THRESHOLD
-              return (
-                <tr
-                  key={t.id}
-                  className={`border-b border-border last:border-0 ${
-                    isLow ? 'bg-warning-soft' : ''
-                  }`}
-                >
-                  <td className="px-4 py-2 whitespace-nowrap text-text-primary">
-                    {formatDateIST(t.txn_date)}
-                  </td>
-                  <td className="px-4 py-2 max-w-md truncate text-text-primary">{t.narration}</td>
-                  <td className="px-4 py-2">
-                    <span className="tag bg-primary-soft text-primary">{t.channel}</span>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-danger">
-                    {t.debit_paise !== null ? formatINR(t.debit_paise) : ''}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-success">
-                    {t.credit_paise !== null ? formatINR(t.credit_paise) : ''}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-text-secondary">
-                    {t.balance_paise !== null ? formatINR(t.balance_paise) : ''}
-                  </td>
-                </tr>
-              )
-            })}
+            {page.items.map((t) => (
+              <tr
+                key={t.id}
+                className={`border-b border-border last:border-0 ${
+                  t.needs_review ? 'bg-warning-soft' : ''
+                }`}
+              >
+                <td className="px-4 py-2 whitespace-nowrap text-text-primary">
+                  {formatDateIST(t.txn_date)}
+                </td>
+                <td className="px-4 py-2 max-w-md truncate text-text-primary">
+                  {t.narration_raw}
+                </td>
+                <td className="px-4 py-2">
+                  <span className="tag bg-primary-soft text-primary">{t.channel}</span>
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-danger">
+                  {t.direction === 'DEBIT' ? formatINR(t.amount_inr) : ''}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-success">
+                  {t.direction === 'CREDIT' ? formatINR(t.amount_inr) : ''}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-text-secondary">
+                  {formatINR(t.balance_after)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-        {transactions.length > 200 && (
+        {page.total > page.items.length && (
           <p className="px-4 py-3 text-label text-text-secondary border-t border-border">
-            Showing first 200 of {transactions.length} — full pagination arrives with the real
-            API.
+            Showing first {page.items.length} of {page.total} transactions.
           </p>
         )}
       </div>

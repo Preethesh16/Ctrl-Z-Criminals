@@ -22,14 +22,15 @@
 ### Person B
 - [x] Frontend scaffold: Vite + React 18 + TS + Tailwind v4 + framer-motion + design-token theme & motion presets (done: 2026-07-02, setup)
 - [x] Typed API client generated from OpenAPI contract + mock fixtures fallback (done: 2026-07-01, B)
-  > note: types are hand-written from plan.md §4.1 (`frontend/src/api/types.ts`) since the OpenAPI contract isn't published yet; regenerate + reconcile when Person A ships it. Mock adapter is default; `VITE_API_MODE=real` flips to the FastAPI proxy.
+  > 2026-07-02: types + client + mock adapter reconciled against the published `backend/openapi.json` (decimal-string money, JobOut with 0–100 progress + "N transactions" detail, paginated transactions, duplicate upload = HTTP 409). Mock adapter now mirrors contract shapes exactly.
 - [x] Cases list page + New Case form (FIR no., complainant, fraud amount) (done: 2026-07-01, B)
 - [x] Case wizard shell (Upload → Review → Analyze steps) (done: 2026-07-01, B)
 - [x] Upload dropzone: multi-file, per-file progress via job polling, "N transactions found" result (done: 2026-07-01, B)
   > note: verified against mocks incl. failure states (password-protected, duplicate hash, unsupported format); real-API pass pending Person A's Phase-1 endpoints.
 
 ### ✅ Checkpoint 1 (merge to main)
-- [ ] Upload a digital PDF through the UI → parsed transactions appear from the real API
+- [x] Upload a digital PDF through the UI → parsed transactions appear from the real API (done: 2026-07-02, B)
+  > verified end-to-end on B's machine through the UI's exact network path: frontend :3000 → `/api` proxy (fixed: proxy now strips the `/api` prefix, backend routes are unprefixed) → FastAPI :8000 → digital PDF parsed → 47 transactions returned in contract shape. Backend's 20 tests pass on B's machine too. Remaining: joint browser walkthrough at merge time.
 
 ---
 
