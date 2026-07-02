@@ -18,9 +18,12 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02)
+## Current state (updated: 2026-07-02, evening)
 
-- **Phase**: 1 — **COMPLETE, Checkpoint 1 verified** against Person A's real API. Ready to merge to main jointly, then start Phase 2 (review queue UI, column-mapping UI, dashboard shell).
+- **Phase**: 2 — **all four Person B Phase-2 tasks built** (mock-first) on branch `person-b/p2-review-queue`. Checkpoint 1 merged to main (PR #2). Person A is mid-Phase-2 (cleaning/balance-audit work).
+- **Waiting on Person A for real wiring**: review-queue API, cleaning stats, saved-template API, and the "unrecognized layout" signal — B's proposed contract shapes are in `frontend/src/api/types.ts` (Phase-2 provisional section) and called out in progress.md notes.
+- **Checkpoint 2 needs**: Person A's statement-forge generator + cleaning suite, then a joint end-to-end run of all 6 formats.
+- Phase 1 state (for reference): frontend + real-API integration verified end-to-end, contract reconciled to `backend/openapi.json`.
 - **Contract**: `backend/openapi.json` is live; `src/api/types.ts` reconciled to it 2026-07-02. Key shapes: money = decimal strings ("500000.00"), JobOut progress 0–100 + detail "N transactions", transactions paginated `{items,total,offset,limit}` with `direction`+`amount_inr`, duplicate upload = HTTP 409, `needs_review` boolean drives review highlighting.
 - **Integration verified on this machine**: backend venv at `backend/.venv` (created via `pip3 --python` because python3-venv lacks ensurepip here), 20 backend tests pass, real digital PDF → 47 transactions through :3000 → /api proxy → :8000.
 - **Done**:
@@ -52,6 +55,15 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 (evening) — Session 4: Phase 2 UI complete (mock-first)
+- Branch `person-b/p2-review-queue` from merged main (PR #2 closed Checkpoint 1).
+- **ReviewQueue** (`src/components/ReviewQueue.tsx`): needs-review rows as cards with reason tags ("Hard to read" / "Possible duplicate"), big ✓ Correct / ✎ Fix (inline date-amount-direction editor) / ✕ Exclude buttons, "N of M cleared" progress, optimistic removal with reload-on-error. Wired into wizard step 2 above the full table.
+- **ColumnMappingModal** (`src/components/ColumnMappingModal.tsx`): raw columns with sample values on the left, canonical field slots on the right, drag *or* tap-to-assign (officer-friendly), required-field validation, "save as template for this bank" → re-parse job polled to done. Launched from a "Map columns" button on failed upload rows.
+- **DashboardPage**: case picker (URL `?case=` param), StatCards (analyzed / needs review / flagged / accounts), cleaning-summary card (duplicates, reversals, balance breaks), "Review N rows now" deep link, Phase-3 analysis placeholder card.
+- **API layer**: provisional Phase-2 types (ReviewAction, CaseStats, DocumentColumns, ColumnTemplate) + 4 provisional endpoints in client + full mock implementations (mutable review state, seeded SUSPECTED_DUPLICATE flags ~4%, `unmapped`-in-filename demo trigger for the mapping flow).
+- Build + lint clean; dashboard/cases routes smoke-tested. Ticked all 4 Phase-2 Person B boxes in progress.md with contract-proposal notes addressed to Person A.
+- **Next session**: reconcile provisional endpoints when Person A's review/cleaning/template APIs land; joint Checkpoint 2 run with statement-forge formats. Until then, possible early Phase-3 prep: Cytoscape spike.
 
 ### 2026-07-02 — Session 3: contract reconciliation + Checkpoint 1 integration
 - Pulled main (PR #1 merged); merged `origin/person-a/p1-foundation` into my branch (standing don't-wait rule) — clean merge, backend + `openapi.json` + `personA.md` now on my branch.
