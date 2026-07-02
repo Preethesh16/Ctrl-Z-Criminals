@@ -79,6 +79,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-03 — Session 12: submission polish — README refresh
+- Pulled main (A fixed the last known real-data misparse — AU Bank layout; coverage now effectively 100%: 160/162, the 2 remainders contain no transactions; 69 tests).
+- progress.md fully ticked — remaining work is ship polish. **Rewrote README.md** for submission judges: status banner (feature-complete, clean-clone verified, real-data numbers), mentor-requirements→implementation table, corrected drift (docling dropped, React 19, Recharts Sankey not d3, OCR described as shipped), demo quickstart incl. container-based forge generation, repo guide updated (demo-script, work logs).
+- Rebuilt the running Docker stack on latest main.
+- Still open for A: the report bank-attribution flag from Session 11 (headermeta) — not yet addressed in their commits.
+
 ### 2026-07-02 — Session 11: officer-lens UX pass with real screenshots
 - Drove the live Docker UI headless via **Windows Edge** (`msedge.exe --headless --screenshot`, works from WSL — no Playwright needed; chromium install blocked on sudo). Shots in `Hacathon/ux-shots/` (outside the repo).
 - All 6 screens audited as a non-technical officer. **Passed**: guided empty states everywhere, plain-English copy, color discipline, ≤2 clicks, evidence-chain table with hashes visible in the report preview, Money Trail flagged-credits-first list reads beautifully.
