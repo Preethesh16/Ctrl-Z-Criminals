@@ -23,6 +23,14 @@ export interface CaseOut {
   created_at: string
 }
 
+/** POST /cases/{id}/documents response — poll the job via job_id. */
+export interface UploadOut {
+  document_id: string
+  job_id: string
+  filename: string
+  sha256: string
+}
+
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed'
 
 export interface JobOut {
@@ -54,6 +62,16 @@ export interface DocumentOut {
 
 export type Direction = 'DEBIT' | 'CREDIT'
 
+/**
+ * Flags are objects with a `rule` discriminator plus rule-specific evidence,
+ * e.g. {rule: "DUPLICATE-SUSPECT", of: "<txn_id>", tier: "exact"},
+ * {rule: "REVERSED", paired_with: "<txn_id>"}, {rule: "FD-07-BALANCE-BREAK", …}.
+ */
+export interface TransactionFlag {
+  rule: string
+  [key: string]: unknown
+}
+
 export interface TransactionOut {
   id: string
   document_id: string
@@ -70,7 +88,7 @@ export interface TransactionOut {
   reference_id: string | null
   counterparty_id: string | null
   counterparty_name: string | null
-  flags: string[]
+  flags: TransactionFlag[]
   extraction_confidence: number
   needs_review: boolean
   excluded: boolean
@@ -84,25 +102,48 @@ export interface Page<T> {
 }
 
 /* ------------------------------------------------------------------
- * Phase-2 PROVISIONAL types — Person A's review/cleaning/template APIs
- * are not published yet; these shapes are Person B's proposal, served
- * by the mock adapter. Reconcile against openapi.json when they land
- * (note any change in progress.md per CLAUDE.md).
+ * Phase-2 shapes reconciled against backend/openapi.json (2026-07-02):
+ * TransactionReview, BankTemplate*, CleanReport are the real contract.
+ * CaseStats and DocumentColumns remain client-side/provisional (no
+ * backend equivalent yet) — see notes on each.
  * ------------------------------------------------------------------ */
 
-/** Officer action on a row in the review queue. */
-export interface ReviewAction {
+/** POST /transactions/{id}/review — corrections are flat fields per the contract. */
+export interface TransactionReview {
   action: 'confirm' | 'correct' | 'exclude'
-  /** For 'correct': the fields the officer fixed. */
-  corrections?: {
-    txn_date?: string
-    amount_inr?: string
-    direction?: Direction
-    narration_raw?: string
-  }
+  txn_date?: string | null
+  amount_inr?: string | null
+  direction?: Direction | null
+  narration_raw?: string | null
+  channel?: string | null
 }
 
-/** Case-level stats for the dashboard shell. */
+/** POST /cases/{id}/clean response — the cleaning pass summary. */
+export interface CleanReport {
+  transactions: number
+  balance_breaks: number
+  duplicate_pairs: number
+  reversal_pairs: number
+}
+
+/** GET/POST /templates — header_signature is the normalized '|'-joined header row. */
+export interface BankTemplateIn {
+  name: string
+  bank?: string | null
+  header_signature: string
+  mapping: Record<string, string>
+}
+
+export interface BankTemplateOut extends BankTemplateIn {
+  id: string
+  created_at: string
+}
+
+/**
+ * Case-level stats for the dashboard shell. No single backend endpoint —
+ * the real adapter composes it from transactions/documents queries; the
+ * cleaning numbers come from POST /clean (see CleanReport).
+ */
 export interface CaseStats {
   case_id: string
   documents_count: number
@@ -118,7 +159,11 @@ export interface CaseStats {
   }
 }
 
-/** Raw extracted grid of an unparseable document, for the mapping UI. */
+/**
+ * Raw extracted grid of an unparseable document, for the mapping UI.
+ * PROVISIONAL: no backend endpoint yet (mock-only) — Person A's template
+ * auto-application task will define the real source of raw columns.
+ */
 export interface DocumentColumns {
   document_id: string
   filename: string
@@ -140,7 +185,7 @@ export type CanonicalField =
   | 'balance'
   | 'ignore'
 
-/** column index → canonical field; saved as a reusable per-bank template. */
+/** The officer's mapping choice from the modal: column index → canonical field. */
 export interface ColumnTemplate {
   bank_name: string
   mapping: Record<number, CanonicalField>

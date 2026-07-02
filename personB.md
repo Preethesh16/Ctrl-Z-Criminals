@@ -18,12 +18,18 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, evening)
+## Current state (updated: 2026-07-02, night)
 
-- **Phase**: 2 — **all four Person B Phase-2 tasks built** (mock-first) on branch `person-b/p2-review-queue`. Checkpoint 1 merged to main (PR #2). Person A is mid-Phase-2 (cleaning/balance-audit work).
-- **Waiting on Person A for real wiring**: review-queue API, cleaning stats, saved-template API, and the "unrecognized layout" signal — B's proposed contract shapes are in `frontend/src/api/types.ts` (Phase-2 provisional section) and called out in progress.md notes.
-- **Checkpoint 2 needs**: Person A's statement-forge generator + cleaning suite, then a joint end-to-end run of all 6 formats.
-- Phase 1 state (for reference): frontend + real-API integration verified end-to-end, contract reconciled to `backend/openapi.json`.
+- **Phase**: 2 — **COMPLETE and real-wired, Checkpoint 2 verified B-side** on branch `person-b/p2-real-wiring`. Review queue, cleaning, and templates now hit Person A's real endpoints; mocks kept in contract parity.
+- **Real contract notes (the repo openapi.json is STALE vs code — trust `backend/app/main.py`)**:
+  - Upload (`POST /cases/{id}/documents` or `/uploads` alias) returns `UploadOut{document_id, job_id, filename, sha256}` → poll `job_id`.
+  - `flags` are objects `{rule: "DUPLICATE-SUSPECT"|"REVERSED"|"FD-07-BALANCE-BREAK", …evidence}`.
+  - Review corrections are FLAT fields on `TransactionReview` (no nested `corrections`).
+  - Cleaning = explicit `POST /cases/{id}/clean` → `{transactions, balance_breaks, duplicate_pairs, reversal_pairs}` (idempotent). Dashboard has a "Run cleaning" button.
+  - Templates: `GET/POST /templates`, `header_signature` = lowercased `|`-joined headers. No raw-columns endpoint and no server-side re-parse yet → mapping modal stays mock-fed for columns; real save → "re-upload the file" message.
+- **Machine setup gap**: scanned-PDF OCR needs `sudo apt install poppler-utils tesseract-ocr` on this WSL — not yet installed (needs password). Until then scanned uploads fail gracefully. ⚠️ Also: running `backend/tests/test_forge_roundtrip.py` REGENERATES `tools/statement-forge/out/` and corrupts it if poppler is missing — restore with `git checkout -- tools/statement-forge/out/`.
+- **Checkpoint 2**: ticked (B-side, 8/9 files: parse → clean finds planted reversal → review confirm/correct → dup 409). Joint browser walkthrough + merge to main remain.
+- **Next up**: merge to main with Person A, then Phase 3 UI (Cytoscape flow graph, Sankey trail, dashboard charts) — Person A already has a `person-a/p3-detection` branch going.
 - **Contract**: `backend/openapi.json` is live; `src/api/types.ts` reconciled to it 2026-07-02. Key shapes: money = decimal strings ("500000.00"), JobOut progress 0–100 + detail "N transactions", transactions paginated `{items,total,offset,limit}` with `direction`+`amount_inr`, duplicate upload = HTTP 409, `needs_review` boolean drives review highlighting.
 - **Integration verified on this machine**: backend venv at `backend/.venv` (created via `pip3 --python` because python3-venv lacks ensurepip here), 20 backend tests pass, real digital PDF → 47 transactions through :3000 → /api proxy → :8000.
 - **Done**:
@@ -55,6 +61,14 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 (night) — Session 5: real-wire Phase 2 + Checkpoint 2 verification
+- Pulled main (PR #3 merged my P2 UI; Person A's OCR/DOCX/forge/cleaning/review/template APIs all landed). Branch `person-b/p2-real-wiring`.
+- Reconciled the API layer with the real Phase-2 contract (see Current state): flat `TransactionReview`, flag objects, `CleanReport`, `BankTemplateIn/Out`, `UploadOut` upload response (client now polls `job_id` — this was a would-be production bug, the repo's openapi.json is stale). Real `getCaseStats` composes documents+transactions queries; `getDocumentColumns` 501s in real mode (no backend source yet).
+- ReviewQueue: rule-based reason tags (incl. "Balance mismatch" for FD-07). Dashboard: "Run cleaning" button → `POST /clean`, summary merged into the cleaning card. Mapping modal: real mode saves to `POST /templates` (computed header signature) and tells the officer to re-upload.
+- **Checkpoint 2 run** (real backend, forge files): 8 formats → 45 txns; `/clean` caught the planted reversal; review confirm+correct verified with UI payloads; duplicate 409 verified; scanned PDF fails gracefully (poppler missing locally — A's golden test covers OCR). Full chain re-verified through the :3000 proxy.
+- Ops notes: stale `backend/tracenet.db` from my Checkpoint-1 run broke A's new tests (deleted it — schema had changed); forge pytest regenerated+corrupted `tools/statement-forge/out/` on my popplerless machine (restored via git; warning recorded above).
+- **Next session**: joint walkthrough + Checkpoint-2 merge, then Phase 3 UI.
 
 ### 2026-07-02 (evening) — Session 4: Phase 2 UI complete (mock-first)
 - Branch `person-b/p2-review-queue` from merged main (PR #2 closed Checkpoint 1).
