@@ -32,6 +32,15 @@
 
 ## Log
 
+### 2026-07-02 — Session 3: direction repair + statement-forge + review API
+- Balance audit round 1 exposed a systematic bug: `pdf_text_regex` fallback dropped credit rows (`0.00 | 500.00 | bal` → amount 0 → skipped) and guessed all directions as DEBIT. Fixes:
+  - fallback now emits 5-col rows keeping BOTH amount columns;
+  - new `rows.repair_directions()` uses running-balance deltas as ground truth to correct DEBIT/CREDIT (handles newest-first statements); applied to all regex-fallback extractions.
+- Built `tools/statement-forge/forge.py`: deterministic synthetic fraud case — victim + 8 mules, 4 banks, 5 formats (reportlab PDF, Finacle CSV, XLSX, HTML-disguised .xls, fixed-width TXT), planted smurfing (6×<50k), layering, time-ordered ROUND TRIP (m3→m4→m5→m1), ~40% ATM cash-out at odd hours, one reversed IMPS — with `case_manifest.json` ground truth. Bug found & fixed en route: balances must be computed AFTER time-sorting events, not in call order.
+- Golden tests: all forge formats extract (≥90% row recovery), planted RRNs found on both legs, all balances reconcile. New deps: reportlab, lxml. pandas `read_html` fixes: StringIO wrapper + re-adding `<th>` header row.
+- Review-queue API: `POST /transactions/{id}/review` (confirm/correct/exclude, per-field audit of corrections, confidence→1.0 officer-verified). Contract regenerated.
+- Tests: 37 passing.
+
 ### 2026-07-02 — Session 2: Person B merge + contract v2 + cleaning suite (Phase 2 started)
 - Merged `origin/main` (Deepthi's Phase-1 frontend, PR #1) into `person-a/p1-foundation`.
 - Audited her provisional `frontend/src/api/types.ts` against the real API — found 6 contract mismatches. Adopted her better designs on the backend (richer upload response, `/uploads` alias, job error codes + transactions_found); documented the 5 frontend-side diffs in progress.md Deviations with @Deepthi tag.

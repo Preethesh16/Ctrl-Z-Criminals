@@ -94,6 +94,18 @@ class TransactionOut(BaseModel):
     excluded: bool
 
 
+class TransactionReview(BaseModel):
+    """Officer review action on a low-confidence/flagged row."""
+
+    action: str = Field(pattern="^(confirm|correct|exclude)$")
+    # for action=correct — only provided fields are changed:
+    txn_date: date | None = None
+    amount_inr: str | None = None
+    direction: str | None = Field(default=None, pattern="^(DEBIT|CREDIT)$")
+    narration_raw: str | None = None
+    channel: str | None = None
+
+
 class Page[T](BaseModel):
     items: list[T]
     total: int

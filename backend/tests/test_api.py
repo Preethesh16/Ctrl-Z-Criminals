@@ -45,3 +45,32 @@ def test_upload_flow():
         files={"file": ("stmt-copy.csv", io.BytesIO(CSV), "text/csv")},
     )
     assert r.status_code == 409
+
+
+def test_review_flow():
+    r = client.post("/cases", json={"fir_number": "TEST-0002/2026"})
+    case_id = r.json()["id"]
+    r = client.post(f"/cases/{case_id}/uploads",
+                    files={"file": ("s2.csv", io.BytesIO(CSV), "text/csv")})
+    assert r.status_code == 200
+    r = client.get(f"/cases/{case_id}/transactions")
+    txn = r.json()["items"][0]
+
+    # correct the amount
+    r = client.post(f"/transactions/{txn['id']}/review",
+                    json={"action": "correct", "amount_inr": "51000.00"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["amount_inr"] == "51000.00"
+    assert body["needs_review"] is False
+    assert body["extraction_confidence"] == 1.0
+
+    # exclude another row
+    txn2 = client.get(f"/cases/{case_id}/transactions").json()["items"][1]
+    r = client.post(f"/transactions/{txn2['id']}/review", json={"action": "exclude"})
+    assert r.json()["excluded"] is True
+
+    # cleaning endpoint runs and reports a summary
+    r = client.post(f"/cases/{case_id}/clean")
+    assert r.status_code == 200
+    assert set(r.json()) == {"transactions", "balance_breaks", "duplicate_pairs", "reversal_pairs"}

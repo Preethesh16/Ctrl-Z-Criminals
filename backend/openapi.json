@@ -300,6 +300,56 @@
     }
    }
   },
+  "/transactions/{txn_id}/review": {
+   "post": {
+    "summary": "Review Transaction",
+    "description": "Officer review: confirm / correct / exclude a row. Fully audit-logged.",
+    "operationId": "review_transaction_transactions__txn_id__review_post",
+    "parameters": [
+     {
+      "name": "txn_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Txn Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TransactionReview"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TransactionOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/cases/{case_id}/clean": {
    "post": {
     "summary": "Clean Case",
@@ -935,6 +985,78 @@
      "excluded"
     ],
     "title": "TransactionOut"
+   },
+   "TransactionReview": {
+    "properties": {
+     "action": {
+      "type": "string",
+      "pattern": "^(confirm|correct|exclude)$",
+      "title": "Action"
+     },
+     "txn_date": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Txn Date"
+     },
+     "amount_inr": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount Inr"
+     },
+     "direction": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^(DEBIT|CREDIT)$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction"
+     },
+     "narration_raw": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Narration Raw"
+     },
+     "channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Channel"
+     }
+    },
+    "type": "object",
+    "required": [
+     "action"
+    ],
+    "title": "TransactionReview",
+    "description": "Officer review action on a low-confidence/flagged row."
    },
    "UploadOut": {
     "properties": {

@@ -32,6 +32,54 @@ class RawTxn:
     problems: list[str] = field(default_factory=list)
 
 
+_TOL = Decimal("0.01")
+
+
+def _delta_matches(rows: list[RawTxn]) -> int:
+    """How many consecutive balance deltas equal the row amount (order sanity)."""
+    ok, prev = 0, None
+    for t in rows:
+        if t.balance is None:
+            prev = None
+            continue
+        if prev is not None and abs(abs(t.balance - prev) - t.amount) <= _TOL:
+            ok += 1
+        prev = t.balance
+    return ok
+
+
+def repair_directions(txns: list[RawTxn]) -> int:
+    """Correct DEBIT/CREDIT using running-balance deltas (ground truth).
+
+    The regex line fallback cannot know column order (debit-first vs
+    credit-first) or the direction of single-amount lines. When a balance
+    chain exists, `balance[i] - balance[i-1]` decides the direction
+    authoritatively. Handles newest-first statements by picking the
+    iteration order with more consistent deltas. Returns #corrections.
+    """
+    rows = sorted(txns, key=lambda t: t.row_index)
+    if _delta_matches(list(reversed(rows))) > _delta_matches(rows):
+        rows = list(reversed(rows))
+
+    fixed, prev = 0, None
+    for t in rows:
+        if t.balance is None:
+            prev = None
+            continue
+        if prev is not None:
+            delta = t.balance - prev
+            if delta != 0 and abs(abs(delta) - t.amount) <= _TOL:
+                want = "CREDIT" if delta > 0 else "DEBIT"
+                if t.direction != want:
+                    t.direction = want
+                    fixed += 1
+                if "direction_assumed" in t.problems:
+                    t.problems.remove("direction_assumed")
+                    t.confidence = min(1.0, round(t.confidence + 0.15, 2))
+        prev = t.balance
+    return fixed
+
+
 def find_header(grid: list[list], max_scan: int = 45) -> tuple[int | None, dict[str, int]]:
     """Locate the most header-like row in the first rows and map its columns."""
     best = (None, {}, 2)  # (row_idx, mapping, best_score) — need score >= 3

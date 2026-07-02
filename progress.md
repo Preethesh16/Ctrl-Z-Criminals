@@ -39,12 +39,13 @@
 - [ ] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/threshold) + PaddleOCR primary + Tesseract cross-check confidence
 - [ ] DOCX parser (python-docx tables) and image/photo parser
 - [ ] docling fallback for digital PDFs when balance reconciliation fails
-- [ ] Per-row extraction_confidence; review-queue API (confirm/correct/exclude)
+- [x] Per-row extraction_confidence; review-queue API (confirm/correct/exclude) (done: 2026-07-02, A)
 - [x] Cleaning: exact + fuzzy duplicate detection (flagged, never silently deleted) (done: 2026-07-02, A)
 - [x] Cleaning: failed/reversed transaction pairing (REV/RET/REFUND/same-ref) (done: 2026-07-02, A)
 - [x] Cleaning: running-balance consistency check (FD-07 flag on break) (done: 2026-07-02, A)
 - [ ] Bank templates: SBI, HDFC, ICICI, Axis, Kotak, Canara, PNB, BoB
-- [ ] `tools/statement-forge/`: synthetic fraud case generator — 6 formats, planted round trip, smurfing, 40% cash-out, one reversal
+- [x] `tools/statement-forge/`: synthetic fraud case generator — 9 accounts / 5 formats (PDF, CSV, XLSX, HTML-xls, TXT), planted round trip + smurfing + cash-out + reversal, ground-truth manifest, golden round-trip tests (done: 2026-07-02, A)
+  > note: scanned-PDF + DOCX forge outputs land with the Phase-2 OCR/DOCX parsers
 - [ ] Saved-template API for the column-mapping UI
 
 ### Person B

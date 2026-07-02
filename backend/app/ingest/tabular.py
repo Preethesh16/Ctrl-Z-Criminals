@@ -35,8 +35,12 @@ def read_csv_grid(path: str | Path) -> list[list]:
 
 def read_html_table_grid(path: str | Path) -> list[list]:
     """Banks sometimes ship .xls that is actually an HTML table."""
-    frames = pd.read_html(Path(path).read_text(errors="replace"), header=None)
+    frames = pd.read_html(io.StringIO(Path(path).read_text(errors="replace")), header=None)
     grid: list[list] = []
     for df in frames:
+        # pandas promotes <th> cells to df.columns even with header=None —
+        # put them back as a data row so header detection can see them.
+        if not all(isinstance(c, int) for c in df.columns):
+            grid.append([str(c) for c in df.columns])
         grid.extend(_df_to_grid(df))
     return grid
