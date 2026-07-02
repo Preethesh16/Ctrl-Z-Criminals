@@ -88,7 +88,53 @@ uvicorn app.main:app --reload           # http://localhost:8000/docs should load
 cd ../frontend && npm run dev           # http://localhost:3000 should show Cases page
 ```
 
-## 6. Troubleshooting
+## 7. Public deployment (Vercel frontend + hosted backend)
+
+This is for a **public demo link only** — synthetic statement-forge data, never anything from `Bank-statements-dataset/`. The real submission/pitch story is the offline Docker stack (§1 Option A); this section is a convenience URL for judges to click.
+
+### 7.1 Frontend → Vercel
+
+`frontend/vercel.json` is already committed with the routing rewrites. In the Vercel dashboard:
+
+| Setting | Value |
+|---|---|
+| Root Directory | `frontend` |
+| Framework Preset | Vite |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Env var | `VITE_API_MODE=real` |
+
+After the backend is deployed (§7.2), edit `frontend/vercel.json` — replace `YOUR-BACKEND-URL` with the real backend URL — commit, and Vercel auto-redeploys.
+
+### 7.2 Backend → Render or Railway (Vercel cannot host it)
+
+The backend needs Tesseract, Poppler, and Pango system binaries, a Postgres connection, and persistent file storage for uploads — none of which fit Vercel's serverless functions. `backend/Dockerfile` already bundles everything, so either host works as a plain "deploy this Dockerfile" service.
+
+**Render — recommended for this project:**
+1. render.com → **New → Web Service** → connect the GitHub repo.
+2. **Root Directory**: `backend`. **Runtime**: Docker (Render finds `backend/Dockerfile` automatically).
+3. **Instance type**: Free tier works for a demo (spins down when idle — first request after sleep takes ~30s, mention that in the demo).
+4. Environment variables (Render dashboard → Environment):
+   ```
+   DATABASE_URL=postgresql+psycopg://...   ← from Neon, see §1 Option B
+   SECRET_KEY=<generate a long random string>
+   LLM_ENABLED=false
+   UPLOAD_DIR=/var/data/uploads
+   MAX_UPLOAD_MB=50
+   ```
+5. Add a **Render Disk** (Settings → Disks → 1GB is plenty) mounted at `/var/data` — without this, every redeploy/restart wipes uploaded statements.
+6. Deploy → copy the service URL (`https://<name>.onrender.com`) → paste into `frontend/vercel.json`.
+
+**Railway — the alternative**, marginally simpler UI, usage-based free credits instead of a hard free tier, no separate "disk" step (volumes are built into the project). Same Dockerfile, same env vars, same Neon DB. Functionally near-identical to Render for this app; pick whichever account you already trust more. Full comparison of trade-offs is in the recommendation the assistant will give inline when asked — this file just needs to describe the mechanics of either.
+
+### 7.3 After both are live
+
+```bash
+curl https://<your-backend>.onrender.com/health   # {"status": "ok"}
+```
+Then open the Vercel URL, create a case, upload a few `tools/statement-forge/out/` files, and confirm the review → analyze → report flow works over the public URLs before sharing the link.
+
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
