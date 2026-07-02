@@ -18,9 +18,11 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-01)
+## Current state (updated: 2026-07-02)
 
-- **Phase**: 1 — Foundation. **All Person B Phase-1 tasks done** (against mocks).
+- **Phase**: 1 — **COMPLETE, Checkpoint 1 verified** against Person A's real API. Ready to merge to main jointly, then start Phase 2 (review queue UI, column-mapping UI, dashboard shell).
+- **Contract**: `backend/openapi.json` is live; `src/api/types.ts` reconciled to it 2026-07-02. Key shapes: money = decimal strings ("500000.00"), JobOut progress 0–100 + detail "N transactions", transactions paginated `{items,total,offset,limit}` with `direction`+`amount_inr`, duplicate upload = HTTP 409, `needs_review` boolean drives review highlighting.
+- **Integration verified on this machine**: backend venv at `backend/.venv` (created via `pip3 --python` because python3-venv lacks ensurepip here), 20 backend tests pass, real digital PDF → 47 transactions through :3000 → /api proxy → :8000.
 - **Done**:
   - Frontend scaffold (theme tokens, motion presets, `Button`/`Card`/`StatCard`/`Input` primitives).
   - Router + `AppLayout` shell (react-router-dom; dark sidebar with NavLink active state; showcase `App.tsx` replaced).
@@ -50,6 +52,15 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 — Session 3: contract reconciliation + Checkpoint 1 integration
+- Pulled main (PR #1 merged); merged `origin/person-a/p1-foundation` into my branch (standing don't-wait rule) — clean merge, backend + `openapi.json` + `personA.md` now on my branch.
+- Read Person A's log: their whole Phase-1 lane is done, 93.2% real-data coverage, contract published.
+- Rewrote the API layer to match the real contract (types.ts, client.ts, mockAdapter.ts — mock now has full contract parity incl. 409 duplicates and "N transactions" job detail). Moved `ApiError` to `src/api/errors.ts` (shared by both adapters). Updated CasesPage (CaseOut has no status/counts; only FIR required now), CaseWizardPage (paginated transactions, `needs_review` highlighting, direction-based debit/credit columns), UploadDropzone (progress 0–100, error guidance classified from HTTP status + message text since the contract carries failures as free text).
+- **Found + fixed a real integration bug**: vite proxy forwarded `/api/cases` verbatim but backend routes are unprefixed → added `rewrite` strip. ⚠️ The Phase-4 nginx config must strip `/api` the same way.
+- Stood up the backend locally (pip3 --python workaround for missing ensurepip), ran their 20 tests (pass), then verified Checkpoint 1 through the UI's exact network path: create case → upload real digital PDF (local-only) → job polls to done → 47 transactions in contract shape via the :3000 proxy.
+- Build + lint clean. Ticked Checkpoint 1 in progress.md (joint browser walkthrough still recommended at merge).
+- **Next session starts at**: merge to main with Person A, then Phase 2 review-queue UI.
 
 ### 2026-07-01 — Session 2: Phase 1 complete (mock-first)
 - Installed `react-router-dom`; replaced showcase `App.tsx` with real router + `AppLayout` (kept sanctioned sidebar/motion patterns).
