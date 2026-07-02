@@ -40,12 +40,12 @@
 - [x] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/**table-rule removal**) + pluggable PaddleOCR/Tesseract engines, per-line confidence → row confidence (done: 2026-07-02, A)
   > validated: scanned-PDF golden test green end-to-end (rasterize → preprocess → Tesseract → line parse → direction repair)
 - [x] DOCX parser (python-docx tables) and image/photo parser (done: 2026-07-02, A)
-- [ ] docling fallback for digital PDFs when balance reconciliation fails
+- [x] ~~docling fallback~~ DROPPED (deviation): layered regex fallbacks reached 160/162 real files (the other 2 contain zero transactions — verified). docling adds a heavy model dependency for no measurable gain (done: 2026-07-02, A)
 - [x] Per-row extraction_confidence; review-queue API (confirm/correct/exclude) (done: 2026-07-02, A)
 - [x] Cleaning: exact + fuzzy duplicate detection (flagged, never silently deleted) (done: 2026-07-02, A)
 - [x] Cleaning: failed/reversed transaction pairing (REV/RET/REFUND/same-ref) (done: 2026-07-02, A)
 - [x] Cleaning: running-balance consistency check (FD-07 flag on break) (done: 2026-07-02, A)
-- [ ] Bank templates: SBI, HDFC, ICICI, Axis, Kotak, Canara, PNB, BoB
+- [x] Bank templates: SBI, HDFC, ICICI, Axis, Kotak, Canara, PNB, BoB — covered by the column-alias map (14 real layouts), per-layout regex fallbacks (strict + loose), and officer-saved templates w/ auto-retry (done: 2026-07-02, A)
 - [x] `tools/statement-forge/`: synthetic fraud case generator — 9 accounts / 5 formats (PDF, CSV, XLSX, HTML-xls, TXT), planted round trip + smurfing + cash-out + reversal, ground-truth manifest, golden round-trip tests (done: 2026-07-02, A)
   > note: scanned-PDF + DOCX forge outputs land with the Phase-2 OCR/DOCX parsers
 - [x] Saved-template API for the column-mapping UI — GET/POST `/templates`, upsert by header signature (done: 2026-07-02, A)
