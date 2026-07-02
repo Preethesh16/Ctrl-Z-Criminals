@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { CaseOut, Page, TransactionOut } from '../api/types'
+import type { AnalysisSummary, CaseOut, Page, TransactionOut } from '../api/types'
 import { ReviewQueue } from '../components/ReviewQueue'
 import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
@@ -103,19 +103,68 @@ export function CaseWizardPage() {
         />
       )}
 
-      {step === 'Analyze' && (
-        <Card className="max-w-xl">
-          <h2 className="text-section text-text-primary mb-2">Run analysis</h2>
-          <p className="text-body text-text-secondary mb-4">
-            One click will look for round trips, trace where the money went, and flag suspicious
-            activity across all uploaded statements.
-          </p>
-          <Button disabled title="Detection engine arrives in Phase 3">
-            Analyze case (coming in Phase 3)
-          </Button>
-        </Card>
-      )}
+      {step === 'Analyze' && <AnalyzeStep caseId={caseId} disabled={totalTxns === 0} />}
     </motion.div>
+  )
+}
+
+function AnalyzeStep({ caseId, disabled }: { caseId: string; disabled: boolean }) {
+  const [running, setRunning] = useState(false)
+  const [summary, setSummary] = useState<AnalysisSummary | null>(null)
+  const [failed, setFailed] = useState(false)
+  const navigate = useNavigate()
+
+  async function run() {
+    setRunning(true)
+    setFailed(false)
+    try {
+      setSummary(await api.analyzeCase(caseId))
+    } catch {
+      setFailed(true)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <Card className="max-w-xl">
+      <h2 className="text-section text-text-primary mb-2">Run analysis</h2>
+      <p className="text-body text-text-secondary mb-4">
+        One click looks for round trips, traces where the money went, and flags suspicious
+        activity across all uploaded statements.
+      </p>
+      <Button onClick={run} disabled={disabled || running}>
+        {running ? 'Analyzing…' : summary ? 'Re-run analysis' : 'Analyze case'}
+      </Button>
+      {disabled && (
+        <p className="text-body text-text-secondary mt-3">Upload at least one statement first.</p>
+      )}
+      {failed && (
+        <p className="text-body text-danger mt-3">Analysis failed — is the server running?</p>
+      )}
+
+      {summary && (
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="text-body text-text-primary mb-3">
+            Done. {summary.transactions} transactions analyzed —{' '}
+            <span className="font-medium text-danger">{summary.flagged} flagged</span>
+            {typeof summary.round_trips === 'number' && summary.round_trips > 0 && (
+              <span className="font-medium text-danger">
+                {' '}
+                · {summary.round_trips} round trip{summary.round_trips === 1 ? '' : 's'} found
+              </span>
+            )}
+            .
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => navigate(`/dashboard?case=${caseId}`)}>Open Dashboard</Button>
+            <Button variant="secondary" onClick={() => navigate(`/flow-graph?case=${caseId}`)}>
+              See the money flow
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
