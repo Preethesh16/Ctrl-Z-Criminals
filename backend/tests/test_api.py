@@ -134,3 +134,19 @@ def test_template_save_and_upsert():
 
     names = [t["name"] for t in client.get("/templates").json()]
     assert names.count("PNB ledger v2") == 1
+
+
+def test_upload_hardening():
+    r = client.post("/cases", json={"fir_number": "HARD-0001/2026"})
+    case_id = r.json()["id"]
+
+    # empty file rejected
+    r = client.post(f"/cases/{case_id}/uploads",
+                    files={"file": ("empty.csv", io.BytesIO(b""), "text/csv")})
+    assert r.status_code == 422
+
+    # path traversal neutralized: stored under case dir with basename only
+    r = client.post(f"/cases/{case_id}/uploads",
+                    files={"file": ("../../evil.csv", io.BytesIO(CSV), "text/csv")})
+    assert r.status_code == 200
+    assert r.json()["filename"] == "evil.csv"
