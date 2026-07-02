@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>{{ css }}</style></head>
+<body>
+
+<h1>Standardized Statement Extraction</h1>
+<p class="sub">All uploaded statements, whatever their source format, rendered in one uniform structure ·
+Case {{ case.fir_number }} · generated {{ generated_at }} IST · TraceNet</p>
+
+{% for d in documents %}
+<h2>{{ loop.index }}. {{ d.filename }} <span class="sub">({{ d.file_kind }})</span></h2>
+<p class="kv"><b>Bank / Account</b> {{ d.bank_name or "—" }} · {{ d.account_number or "—" }} · {{ d.account_holder or "" }}</p>
+<p class="kv"><b>SHA-256</b> <span class="mono">{{ d.sha256 }}</span></p>
+<table>
+  <tr><th>Date</th><th>Narration</th><th>Ref / Txn ID</th><th class="num">Debit (₹)</th>
+      <th class="num">Credit (₹)</th><th class="num">Balance (₹)</th><th>Channel</th></tr>
+  {% for t in d.txns %}
+  <tr>
+    <td>{{ t.txn_date }}</td>
+    <td class="small">{{ t.narration_raw[:110] }}</td>
+    <td class="mono">{{ t.reference_id or "" }}</td>
+    <td class="num">{{ t.amount_inr if t.direction == "DEBIT" else "" }}</td>
+    <td class="num">{{ t.amount_inr if t.direction == "CREDIT" else "" }}</td>
+    <td class="num">{{ t.balance_after or "" }}</td>
+    <td>{{ t.channel }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endfor %}
+
+</body>
+</html>

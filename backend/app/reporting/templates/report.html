@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>{{ css }}</style></head>
+<body>
+
+<h1>Investigation Report — TraceNet</h1>
+<p class="sub">Automated bank statement analysis · generated {{ generated_at }} IST · This report presents
+investigative leads with supporting evidence. Final determinations rest with the Investigating Officer.</p>
+
+<h2>1. Case</h2>
+<p class="kv"><b>FIR / Case No.</b> {{ case.fir_number }}</p>
+<p class="kv"><b>Complainant</b> {{ case.complainant or "—" }}</p>
+<p class="kv"><b>Reported fraud amount</b> {{ case.fraud_amount or "—" }}</p>
+<p class="kv"><b>Complaint date</b> {{ case.complaint_date or "—" }}</p>
+
+<h2>2. Source Documents & Evidence Chain</h2>
+<table>
+  <tr><th>File</th><th>Bank / Account</th><th>Period</th><th class="num">Txns</th><th>SHA-256 (evidence hash)</th></tr>
+  {% for d in documents %}
+  <tr>
+    <td>{{ d.filename }}</td>
+    <td>{{ d.bank_name or "—" }} · {{ d.account_number or "—" }}<br><span class="sub">{{ d.account_holder or "" }}</span></td>
+    <td>{{ d.period_from or "—" }} → {{ d.period_to or "—" }}</td>
+    <td class="num">{{ d.txn_count }}</td>
+    <td class="mono">{{ d.sha256 }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>3. Data Cleaning Summary</h2>
+<div class="callout">
+  {{ summary.transactions }} transactions analysed ·
+  {{ summary.cleaning.duplicate_pairs }} duplicate pair(s) flagged ·
+  {{ summary.cleaning.reversal_pairs }} failed/reversed transfer(s) excluded from flow analysis ·
+  {{ summary.cleaning.balance_breaks }} balance-consistency break(s) (possible tampering or extraction gaps — review §7)
+</div>
+
+<h2>4. Round-Trip Transactions (Circular Fund Movement)</h2>
+{% if round_trips %}
+  {% for lp in round_trips %}
+  <div class="callout danger">
+    <b>{{ lp.loop_id }}</b> — {{ " → ".join(lp.path) }}<br>
+    Out ₹{{ lp.amount_out }} · returned ₹{{ lp.amount_back }} ({{ lp.pct_returned }}%) over
+    {{ lp.hops }} hops in {{ lp.elapsed_hours }} h · suspicion score {{ lp.score }}
+  </div>
+  <table>
+    <tr><th>From</th><th>To</th><th class="num">Amount</th><th>Evidence</th><th>Reference</th><th>When</th></tr>
+    {% for e in lp.edges %}
+    <tr><td>{{ e.source }}</td><td>{{ e.target }}</td><td class="num">{{ e.amount }}</td>
+        <td>{{ e.tier }}</td><td class="mono">{{ e.reference or "—" }}</td><td>{{ e.when[:16] }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+{% else %}<p>No time-ordered circular fund movement detected.</p>{% endif %}
+
+<h2>5. Money Flow — Disposition of Funds</h2>
+<table>
+  <tr><th>Destination</th><th class="num">Amount (₹)</th><th class="num">% of debits</th></tr>
+  {% for name, b in disposition.buckets.items() %}
+  <tr><td>{{ {"cash":"Cash withdrawal (ATM/counter)","cheque":"Cheque","redirected":"Redirected to other accounts (UPI/NEFT/IMPS/RTGS)","merchant":"Merchant / POS","internal":"Bank internal / charges","unclassified":"Unclassified"}[name] }}</td>
+      <td class="num">{{ b.amount }}</td><td class="num">{{ b.pct }}%</td></tr>
+  {% endfor %}
+  <tr><th>Total debits</th><th class="num">{{ disposition.total_debits }}</th><th></th></tr>
+</table>
+
+<h2>6. Common Suspicious Identifiers</h2>
+{% if correlation %}
+<table>
+  <tr><th>Identifier (UPI/account)</th><th>Name(s)</th><th>Seen in accounts</th><th class="num">Txns</th></tr>
+  {% for c in correlation %}
+  <tr><td class="mono">{{ c.identifier }}</td><td>{{ ", ".join(c.names) or "—" }}</td>
+      <td>{{ ", ".join(c.seen_in_accounts) }}</td><td class="num">{{ c.txn_count }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p>No identifier appears across multiple statements.</p>{% endif %}
+
+<h2>7. Flagged Transactions ({{ flagged|length }})</h2>
+<table>
+  <tr><th>Date</th><th>Account</th><th>Narration</th><th class="num">Amount</th><th>Dir</th><th>Flags & evidence</th></tr>
+  {% for t in flagged %}
+  <tr>
+    <td>{{ t.txn_date }}</td><td>{{ t.account_ref }}</td>
+    <td class="small">{{ t.narration_raw[:90] }}</td>
+    <td class="num">{{ t.amount_inr }}</td><td>{{ t.direction[:2] }}</td>
+    <td>{% for f in t.flags %}{% if not f.rule.startswith("_") %}<span class="flag">{{ f.rule }}</span>{% endif %}{% endfor %}
+        <div class="small sub">{{ t.flags | map(attribute="why") | select | join(" · ") }}</div></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>8. Legal Clause Mapping (indicative)</h2>
+<table>
+  <tr><th>Detected pattern</th><th>Provisions typically cited</th></tr>
+  {% for rule, clauses in legal.items() %}
+  <tr><td>{{ rule }}</td><td>{{ ", ".join(clauses) }}</td></tr>
+  {% endfor %}
+</table>
+<p class="sub">Mapping is an investigative aid; charging decisions rest with the IO and legal counsel.</p>
+
+<h2>9. Audit Trail (chain of custody)</h2>
+<table>
+  <tr><th>When (UTC)</th><th>Actor</th><th>Action</th><th>Detail</th></tr>
+  {% for a in audit %}
+  <tr><td>{{ a.at }}</td><td>{{ a.actor }}</td><td>{{ a.action }}</td>
+      <td class="small mono">{{ a.detail }}</td></tr>
+  {% endfor %}
+</table>
+
+</body>
+</html>

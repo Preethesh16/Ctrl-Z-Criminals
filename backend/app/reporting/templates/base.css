@@ -1,0 +1,22 @@
+@page {
+  size: A4;
+  margin: 18mm 14mm;
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #6b7280; }
+  @bottom-left { content: "TraceNet — CONFIDENTIAL / INVESTIGATION DOCUMENT"; font-size: 8pt; color: #6b7280; }
+}
+body { font-family: "DejaVu Sans", sans-serif; font-size: 9pt; color: #16161d; line-height: 1.45; }
+h1 { font-size: 17pt; margin: 0 0 2mm; }
+h2 { font-size: 12pt; margin: 7mm 0 2mm; border-bottom: 1.5pt solid #2f6fed; padding-bottom: 1mm; }
+h3 { font-size: 10pt; margin: 4mm 0 1mm; }
+.sub { color: #6b7280; font-size: 8.5pt; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
+th { background: #f0f3fa; text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.03em; }
+th, td { border: 0.5pt solid #d7dbe3; padding: 1.2mm 1.8mm; vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flag { display: inline-block; border: 0.5pt solid #e5484d; color: #e5484d; border-radius: 2pt;
+        padding: 0 1.2mm; font-size: 7pt; margin: 0 0.6mm 0.6mm 0; }
+.kv { margin: 0 0 1mm; } .kv b { display: inline-block; min-width: 38mm; }
+.callout { background: #f6f7fb; border-left: 2.5pt solid #2f6fed; padding: 2mm 3mm; margin: 2mm 0; }
+.danger { border-left-color: #e5484d; }
+.small { font-size: 7.5pt; } .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 7.5pt; }
+tr { page-break-inside: avoid; }
