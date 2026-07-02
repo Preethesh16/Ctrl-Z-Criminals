@@ -1,8 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { api, ApiError } from '../api/client'
+import type { JobOut } from '../api/types'
 import { formatBytes } from '../lib/format'
 import { slideUp } from '../theme/motion'
+import { Button } from './ui/Button'
+import { ColumnMappingModal } from './ColumnMappingModal'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.tsv,.docx,.txt,.jpg,.jpeg,.png'
 const POLL_INTERVAL_MS = 700
@@ -20,7 +23,15 @@ function guidanceFor(status: number | null, message: string): string {
     return 'This PDF has a password. Open it, remove the password (usually date of birth or account number the bank set), save, and upload again.'
   if (/unsupported/i.test(message))
     return 'This file type is not supported. Upload the statement as PDF, Excel, CSV, Word, or a photo (JPG/PNG).'
+  if (/unrecognized layout/i.test(message))
+    return "We haven't seen this bank's layout before. Map its columns once and it will be read automatically."
   return `We could not read this statement automatically${message ? ` (${message})` : ''}. It will be routed for manual mapping.`
+}
+
+/** Failed parse jobs carry "unrecognized layout:<documentId>" (provisional mock convention). */
+function mappingDocumentFrom(detail: string | null): string | null {
+  const match = detail?.match(/^unrecognized layout:(.+)$/)
+  return match ? match[1] : null
 }
 
 /** Job completion detail is "N transactions" — extract N for the success chip. */
@@ -40,6 +51,8 @@ interface UploadItem {
   progress: number
   transactionsFound: number | null
   errorText: string | null
+  /** Set when the failure is fixable via the column-mapping UI. */
+  mappingDocumentId: string | null
 }
 
 export function UploadDropzone({
@@ -53,9 +66,42 @@ export function UploadDropzone({
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [mappingTarget, setMappingTarget] = useState<{ key: string; documentId: string } | null>(
+    null,
+  )
+
   const patchItem = useCallback((key: string, patch: Partial<UploadItem>) => {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)))
   }, [])
+
+  /** Poll a parse job until it settles, updating the row as it goes. */
+  const trackJob = useCallback(
+    async (key: string, initialJob: JobOut) => {
+      let job = initialJob
+      while (job.status === 'pending' || job.status === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+        job = await api.getJob(job.id)
+        patchItem(key, { progress: Math.max(5, job.progress) })
+      }
+      if (job.status === 'done') {
+        patchItem(key, {
+          phase: 'done',
+          progress: 100,
+          transactionsFound: transactionsFromDetail(job.detail),
+          errorText: null,
+          mappingDocumentId: null,
+        })
+        onTransactionsAdded?.()
+      } else {
+        patchItem(key, {
+          phase: 'failed',
+          errorText: guidanceFor(null, job.detail ?? ''),
+          mappingDocumentId: mappingDocumentFrom(job.detail),
+        })
+      }
+    },
+    [onTransactionsAdded, patchItem],
+  )
 
   const startUpload = useCallback(
     async (file: File) => {
@@ -70,35 +116,20 @@ export function UploadDropzone({
           progress: 0,
           transactionsFound: null,
           errorText: null,
+          mappingDocumentId: null,
         },
       ])
       try {
         const initialJob = await api.uploadDocument(caseId, file)
         patchItem(key, { phase: 'parsing', progress: Math.max(5, initialJob.progress) })
-        // Poll the parse job until it settles.
-        let job = initialJob
-        while (job.status === 'pending' || job.status === 'running') {
-          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-          job = await api.getJob(job.id)
-          patchItem(key, { progress: Math.max(5, job.progress) })
-        }
-        if (job.status === 'done') {
-          patchItem(key, {
-            phase: 'done',
-            progress: 100,
-            transactionsFound: transactionsFromDetail(job.detail),
-          })
-          onTransactionsAdded?.()
-        } else {
-          patchItem(key, { phase: 'failed', errorText: guidanceFor(null, job.detail ?? '') })
-        }
+        await trackJob(key, initialJob)
       } catch (error) {
         const status = error instanceof ApiError ? error.status : null
         const message = error instanceof Error ? error.message : ''
         patchItem(key, { phase: 'failed', errorText: guidanceFor(status, message) })
       }
     },
-    [caseId, onTransactionsAdded, patchItem],
+    [caseId, patchItem, trackJob],
   )
 
   const handleFiles = useCallback(
@@ -161,16 +192,40 @@ export function UploadDropzone({
           </p>
           <ul className="flex flex-col gap-2">
             {items.map((item) => (
-              <UploadRow key={item.key} item={item} />
+              <UploadRow
+                key={item.key}
+                item={item}
+                onMapColumns={
+                  item.mappingDocumentId
+                    ? () =>
+                        setMappingTarget({ key: item.key, documentId: item.mappingDocumentId! })
+                    : undefined
+                }
+              />
             ))}
           </ul>
         </div>
       )}
+
+      <AnimatePresence>
+        {mappingTarget && (
+          <ColumnMappingModal
+            documentId={mappingTarget.documentId}
+            onClose={() => setMappingTarget(null)}
+            onMapped={(job) => {
+              const { key } = mappingTarget
+              setMappingTarget(null)
+              patchItem(key, { phase: 'parsing', progress: 5, errorText: null })
+              void trackJob(key, job)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-function UploadRow({ item }: { item: UploadItem }) {
+function UploadRow({ item, onMapColumns }: { item: UploadItem; onMapColumns?: () => void }) {
   return (
     <motion.li
       variants={slideUp}
@@ -207,9 +262,14 @@ function UploadRow({ item }: { item: UploadItem }) {
             : 'Statement read'}
         </span>
       )}
-      {item.phase === 'failed' && (
-        <span className="tag bg-danger-soft text-danger shrink-0">Needs attention</span>
-      )}
+      {item.phase === 'failed' &&
+        (onMapColumns ? (
+          <Button className="shrink-0" onClick={onMapColumns}>
+            Map columns
+          </Button>
+        ) : (
+          <span className="tag bg-danger-soft text-danger shrink-0">Needs attention</span>
+        ))}
     </motion.li>
   )
 }

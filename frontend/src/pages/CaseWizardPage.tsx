@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { CaseOut, Page, TransactionOut } from '../api/types'
+import { ReviewQueue } from '../components/ReviewQueue'
 import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -93,7 +94,14 @@ export function CaseWizardPage() {
         </motion.div>
       )}
 
-      {step === 'Review' && <ReviewStep page={txnPage} onNext={() => setStep('Analyze')} />}
+      {step === 'Review' && (
+        <ReviewStep
+          caseId={caseId}
+          page={txnPage}
+          onChanged={refresh}
+          onNext={() => setStep('Analyze')}
+        />
+      )}
 
       {step === 'Analyze' && (
         <Card className="max-w-xl">
@@ -112,10 +120,14 @@ export function CaseWizardPage() {
 }
 
 function ReviewStep({
+  caseId,
   page,
+  onChanged,
   onNext,
 }: {
+  caseId: string
   page: Page<TransactionOut> | null
+  onChanged: () => void
   onNext: () => void
 }) {
   if (!page || page.total === 0) {
@@ -128,21 +140,13 @@ function ReviewStep({
     )
   }
 
-  const reviewCount = page.items.filter((t) => t.needs_review).length
-
   return (
     <motion.div variants={fadeIn} initial="hidden" animate="visible">
+      <ReviewQueue caseId={caseId} onChanged={onChanged} />
+
       <div className="mb-4 flex items-center justify-between">
         <p className="text-body text-text-secondary">
-          {page.total} transactions read.{' '}
-          {reviewCount > 0 ? (
-            <span className="text-warning font-medium">
-              {reviewCount} rows were hard to read and are highlighted — full review-and-fix
-              arrives in Phase 2.
-            </span>
-          ) : (
-            'All rows were read with high confidence.'
-          )}
+          All {page.total} transactions read from the statements:
         </p>
         <Button onClick={onNext}>Next: Analyze →</Button>
       </div>
