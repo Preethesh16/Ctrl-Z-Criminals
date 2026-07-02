@@ -18,7 +18,15 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, night)
+## Current state (updated: 2026-07-02, late night)
+
+- **Phase**: 3 — **COMPLETE, Checkpoint 3 verified B-side** on branch `person-b/p3-visuals`. All Person B phases 1–3 done; only Phase 4 remains (reports UI, Golden Hour board, Docker/nginx, polish, demo script).
+- **Phase-3 deliverables**: FlowGraphPage (Cytoscape: size=throughput, color=suspicion, dashed=probable, loop highlighting + loop cards, PNG export, legend), GraphDrawers (node → account stats/badge/flagged txns with explanations; edge → transfer evidence incl. confirmed-vs-probable wording), MoneyTrailPage (flagged-credits-first picker, stop-rule toggle, hop table, recharts Sankey, "still resting" freeze callout), DashboardPage v2 (Analyze button, disposition donut, flagged timeline, common-identifiers panel), wizard AnalyzeStep (real POST /analyze + deep links), flagExplanations.ts.
+- **New deps**: cytoscape (+@types), recharts.
+- **Verified against real backend on fresh forge case**: planted 5-hop round trip found (37.7% back, score 5.9), disposition/correlation/trail all render from real payloads. ⚠️ Cases parsed with older backend code have stale rows → 0 round trips; always test on a freshly uploaded case after pulling backend changes.
+- Backend deps grew (scikit-learn, networkx): rerun `pip3 --python .venv/bin/python install -r requirements.txt` after pulls.
+
+## Previous state (2026-07-02, night — Phase 2)
 
 - **Phase**: 2 — **COMPLETE and real-wired, Checkpoint 2 verified B-side** on branch `person-b/p2-real-wiring`. Review queue, cleaning, and templates now hit Person A's real endpoints; mocks kept in contract parity.
 - **Real contract notes (the repo openapi.json is STALE vs code — trust `backend/app/main.py`)**:
@@ -61,6 +69,14 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 (late night) — Session 6: Phase 3 visual analysis, real-wired
+- Pulled main: Person A had reconciled all my provisional P2 endpoints to real ones (stats/columns/template-apply — review accepts both flat & nested) AND shipped the full detection engine + analysis APIs. Branch `person-b/p3-visuals`.
+- Simplified client back to direct calls for stats/columns/template; added the 6 analysis endpoints (analyze, graph, round-trips, correlation, disposition, trail) with real-contract types; mock adapter got a coherent synthetic fraud story for offline dev.
+- Built FlowGraphPage + GraphDrawers + MoneyTrailPage (Sankey) + DashboardPage v2 + wizard AnalyzeStep + flagExplanations (see Current state for details). Routes wired; placeholders remain only for Reports (P4).
+- **Checkpoint 3 verified** on a fresh forge case against the real backend — planted round trip detected end-to-end. Two real bugs found & fixed en route: loop `score` is an open scale (UI showed 592%); and stale-parse gotcha documented (old-parser rows kill cross-statement matching — my Checkpoint-2 case showed 0 loops until re-uploaded fresh; also my earlier review-test "correction" of ₹56,500→₹12,345 had broken a loop leg — restored).
+- Backend venv updated (sklearn/networkx now required).
+- **Next session**: Phase 4 — report preview/download page, Golden Hour freeze board + Section 94 summons modal, docker-compose + nginx (remember: nginx must strip `/api`), polish pass, demo script.
 
 ### 2026-07-02 (night) — Session 5: real-wire Phase 2 + Checkpoint 2 verification
 - Pulled main (PR #3 merged my P2 UI; Person A's OCR/DOCX/forge/cleaning/review/template APIs all landed). Branch `person-b/p2-real-wiring`.
