@@ -243,7 +243,7 @@ export function DashboardPage() {
                     <XAxis dataKey="date" fontSize={11} tickLine={false} />
                     <YAxis allowDecimals={false} fontSize={11} tickLine={false} width={28} />
                     <Tooltip />
-                    <Bar dataKey="count" fill="#e5484d" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="#e5484d" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -309,16 +309,22 @@ function DispositionDonut({ disposition }: { disposition: Disposition }) {
 
   return (
     <div className="flex items-center gap-4">
-      <ResponsiveContainer width="55%" height={220}>
-        <PieChart>
-          <Pie data={data} dataKey="value" innerRadius={55} outerRadius={90} strokeWidth={1}>
-            {data.map((d) => (
-              <Cell key={d.name} fill={d.color} />
-            ))}
-          </Pie>
-          <Tooltip formatter={(value) => formatINR(String(value))} />
-        </PieChart>
-      </ResponsiveContainer>
+      {/* Fixed size: ResponsiveContainer can measure 0-width on first paint and drop the pie. */}
+      <PieChart width={220} height={220}>
+        <Pie
+          data={data}
+          dataKey="value"
+          innerRadius={55}
+          outerRadius={90}
+          strokeWidth={1}
+          isAnimationActive={false}
+        >
+          {data.map((d) => (
+            <Cell key={d.name} fill={d.color} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(value) => formatINR(String(value))} />
+      </PieChart>
       <ul className="flex flex-col gap-1 text-body">
         {data.map((d) => (
           <li key={d.name} className="flex items-center gap-2">

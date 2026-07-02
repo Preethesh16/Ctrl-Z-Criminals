@@ -128,6 +128,12 @@
 
 ## Deviations / notes
 
+### 2026-07-02 (B) — Officer-lens UX pass (screenshots in `Hacathon/ux-shots/`, local only)
+
+Walked all 6 screens headless-browser style as a non-technical officer. Fixed: disposition donut not rendering (recharts animation + responsive sizing — now fixed-size, animation off), flow-graph label overlap on disconnected nodes (`nodeDimensionsIncludeLabels`), Flow Graph "press Analyze" empty-state now deep-links to the wizard's Analyze step (`?step=analyze` supported). Verdict otherwise: every page passes the ≤2-clicks / plain-English / red-amber-green rules.
+
+**@Person A — report accuracy bug for court documents**: the investigation-report evidence-chain table attributes `victim_hdfc.pdf` to "SBI · Suresh Patil" — an HDFC-styled statement getting bank=SBI from header-meta extraction. Cosmetic in the demo but a defence lawyer would pounce on it. Worth a look in `headermeta.py`.
+
 _(Record any deviation from plan.md here, with date and reason.)_
 
 ### 2026-07-02 (A) — API contract v2 after reconciling with Person B's provisional types

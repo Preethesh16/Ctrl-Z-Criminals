@@ -79,6 +79,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-02 — Session 11: officer-lens UX pass with real screenshots
+- Drove the live Docker UI headless via **Windows Edge** (`msedge.exe --headless --screenshot`, works from WSL — no Playwright needed; chromium install blocked on sudo). Shots in `Hacathon/ux-shots/` (outside the repo).
+- All 6 screens audited as a non-technical officer. **Passed**: guided empty states everywhere, plain-English copy, color discipline, ≤2 clicks, evidence-chain table with hashes visible in the report preview, Money Trail flagged-credits-first list reads beautifully.
+- **Found + fixed 3 real issues**: (1) disposition donut never rendered — recharts draw animation + ResponsiveContainer zero-width; now fixed-size PieChart with `isAnimationActive={false}` (Bar too); (2) flow-graph labels overlapped on disconnected nodes — `nodeDimensionsIncludeLabels: true` + `componentSpacing: 120`, graph is dramatically more readable; (3) Flow Graph's "press Analyze" link dropped officers on the Upload step — wizard now supports `?step=analyze|review|upload` deep links.
+- **Flagged to A** (progress.md notes): report evidence table shows victim_hdfc.pdf as "SBI" — header-meta bank misattribution, court-accuracy risk.
+- Web container rebuilt with fixes; dashboard/graph re-shot and verified. Screenshot workflow reusable: see EDGE one-liner in this repo's history.
+
 ### 2026-07-02 — Session 10: Checkpoint 4 clean-clone rehearsal — ALL BOXES TICKED
 - Pulled main (A's final balance-audit log). The last unticked box was Checkpoint 4.
 - Cloned the repo fresh from GitHub into `/mnt/c/Deepthi_Files/Hacathon/tracenet-clean-test`, `docker compose -p tracenet-clean up --build` → 3 healthy containers.

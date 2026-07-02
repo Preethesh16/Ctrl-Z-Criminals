@@ -134,7 +134,14 @@ export function FlowGraphPage() {
         })),
       },
       style: buildStylesheet(),
-      layout: { name: 'cose', animate: false, padding: 40 },
+      layout: {
+        name: 'cose',
+        animate: false,
+        padding: 40,
+        // Keep labels of small/disconnected nodes from overlapping each other.
+        nodeDimensionsIncludeLabels: true,
+        componentSpacing: 120,
+      } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.2,
     })
     cy.on('tap', 'node', (evt: EventObject) => {
@@ -236,7 +243,7 @@ export function FlowGraphPage() {
             Run the analysis first — it builds the money-flow picture from all uploaded
             statements.
           </p>
-          <Link to={`/cases/${caseId}/wizard`}>
+          <Link to={`/cases/${caseId}/wizard?step=analyze`}>
             <Button>Go to the case and press Analyze</Button>
           </Link>
         </Card>

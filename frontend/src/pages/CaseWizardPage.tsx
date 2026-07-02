@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { AnalysisSummary, CaseOut, Page, TransactionOut } from '../api/types'
 import { ReviewQueue } from '../components/ReviewQueue'
@@ -17,9 +17,14 @@ const PAGE_SIZE = 200
 
 export function CaseWizardPage() {
   const { caseId = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const [caseData, setCaseData] = useState<CaseOut | null>(null)
   const [notFound, setNotFound] = useState(false)
-  const [step, setStep] = useState<Step>('Upload')
+  // Deep-linkable step (e.g. ?step=analyze from the Flow Graph empty state).
+  const requestedStep = STEPS.find(
+    (s) => s.toLowerCase() === (searchParams.get('step') ?? '').toLowerCase(),
+  )
+  const [step, setStep] = useState<Step>(requestedStep ?? 'Upload')
   const [txnPage, setTxnPage] = useState<Page<TransactionOut> | null>(null)
 
   const refresh = useCallback(() => {
