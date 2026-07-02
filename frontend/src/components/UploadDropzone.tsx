@@ -1,22 +1,32 @@
 import { useCallback, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { api } from '../api/client'
-import type { JobErrorCode } from '../api/types'
+import { api, ApiError } from '../api/client'
 import { formatBytes } from '../lib/format'
 import { slideUp } from '../theme/motion'
 
-const ACCEPT = '.pdf,.xlsx,.xls,.csv,.tsv,.docx,.jpg,.jpeg,.png'
+const ACCEPT = '.pdf,.xlsx,.xls,.csv,.tsv,.docx,.txt,.jpg,.jpeg,.png'
 const POLL_INTERVAL_MS = 700
 
-/** Plain-English guidance per failure — officers read these, keep them jargon-free. */
-const ERROR_GUIDANCE: Record<JobErrorCode, string> = {
-  PASSWORD_PROTECTED:
-    'This PDF has a password. Open it, remove the password (usually date of birth or account number the bank set), save, and upload again.',
-  UNSUPPORTED_FORMAT:
-    'This file type is not supported. Upload the statement as PDF, Excel, CSV, Word, or a photo (JPG/PNG).',
-  DUPLICATE_FILE: 'This exact file is already in this case — no need to upload it twice.',
-  PARSE_FAILED:
-    'We could not read this statement automatically. It will be routed for manual mapping.',
+/**
+ * Plain-English guidance from server error text — officers read these.
+ * The contract carries failures as free text (job.detail / HTTP detail),
+ * so classification is by message content + status code.
+ */
+function guidanceFor(status: number | null, message: string): string {
+  if (status === 409)
+    return 'This exact file is already in this case — no need to upload it twice.'
+  if (status === 413) return 'This file is too large. Split the statement and try again.'
+  if (/password/i.test(message))
+    return 'This PDF has a password. Open it, remove the password (usually date of birth or account number the bank set), save, and upload again.'
+  if (/unsupported/i.test(message))
+    return 'This file type is not supported. Upload the statement as PDF, Excel, CSV, Word, or a photo (JPG/PNG).'
+  return `We could not read this statement automatically${message ? ` (${message})` : ''}. It will be routed for manual mapping.`
+}
+
+/** Job completion detail is "N transactions" — extract N for the success chip. */
+function transactionsFromDetail(detail: string | null): number | null {
+  const match = detail?.match(/(\d+)\s+transactions?/)
+  return match ? Number(match[1]) : null
 }
 
 type UploadPhase = 'uploading' | 'parsing' | 'done' | 'failed'
@@ -26,9 +36,10 @@ interface UploadItem {
   filename: string
   sizeBytes: number
   phase: UploadPhase
+  /** 0–100 */
   progress: number
   transactionsFound: number | null
-  errorCode: JobErrorCode | null
+  errorText: string | null
 }
 
 export function UploadDropzone({
@@ -58,33 +69,33 @@ export function UploadDropzone({
           phase: 'uploading',
           progress: 0,
           transactionsFound: null,
-          errorCode: null,
+          errorText: null,
         },
       ])
       try {
-        const upload = await api.uploadDocument(caseId, file)
-        patchItem(key, { phase: 'parsing', progress: 0.05 })
+        const initialJob = await api.uploadDocument(caseId, file)
+        patchItem(key, { phase: 'parsing', progress: Math.max(5, initialJob.progress) })
         // Poll the parse job until it settles.
-        for (;;) {
-          const job = await api.getJob(upload.job_id)
-          if (job.status === 'done') {
-            patchItem(key, {
-              phase: 'done',
-              progress: 1,
-              transactionsFound: job.transactions_found,
-            })
-            onTransactionsAdded?.()
-            return
-          }
-          if (job.status === 'failed') {
-            patchItem(key, { phase: 'failed', errorCode: job.error_code ?? 'PARSE_FAILED' })
-            return
-          }
-          patchItem(key, { progress: Math.max(0.05, job.progress) })
+        let job = initialJob
+        while (job.status === 'pending' || job.status === 'running') {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+          job = await api.getJob(job.id)
+          patchItem(key, { progress: Math.max(5, job.progress) })
         }
-      } catch {
-        patchItem(key, { phase: 'failed', errorCode: 'PARSE_FAILED' })
+        if (job.status === 'done') {
+          patchItem(key, {
+            phase: 'done',
+            progress: 100,
+            transactionsFound: transactionsFromDetail(job.detail),
+          })
+          onTransactionsAdded?.()
+        } else {
+          patchItem(key, { phase: 'failed', errorText: guidanceFor(null, job.detail ?? '') })
+        }
+      } catch (error) {
+        const status = error instanceof ApiError ? error.status : null
+        const message = error instanceof Error ? error.message : ''
+        patchItem(key, { phase: 'failed', errorText: guidanceFor(status, message) })
       }
     },
     [caseId, onTransactionsAdded, patchItem],
@@ -170,8 +181,8 @@ function UploadRow({ item }: { item: UploadItem }) {
       <div className="min-w-0 flex-1">
         <div className="text-body font-medium text-text-primary truncate">{item.filename}</div>
         <div className="text-label text-text-secondary">{formatBytes(item.sizeBytes)}</div>
-        {item.phase === 'failed' && item.errorCode && (
-          <p className="text-body text-danger mt-1">{ERROR_GUIDANCE[item.errorCode]}</p>
+        {item.phase === 'failed' && item.errorText && (
+          <p className="text-body text-danger mt-1">{item.errorText}</p>
         )}
       </div>
 
@@ -180,7 +191,7 @@ function UploadRow({ item }: { item: UploadItem }) {
           <div className="h-2 flex-1 rounded-pill bg-background overflow-hidden">
             <div
               className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${Math.round(item.progress * 100)}%` }}
+              style={{ width: `${item.progress}%` }}
             />
           </div>
           <span className="text-label text-text-secondary w-16">
@@ -191,7 +202,9 @@ function UploadRow({ item }: { item: UploadItem }) {
 
       {item.phase === 'done' && (
         <span className="tag bg-success-soft text-success shrink-0">
-          {item.transactionsFound ?? 0} transactions found
+          {item.transactionsFound !== null
+            ? `${item.transactionsFound} transactions found`
+            : 'Statement read'}
         </span>
       )}
       {item.phase === 'failed' && (
