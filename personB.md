@@ -18,7 +18,15 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, late night)
+## Current state (updated: 2026-07-02, session 7)
+
+- **Phase**: 4 — **Person B tasks effectively complete** on `person-b/p4-reports-ship` (merged A's `person-a/p4-reports` in). Report page, Golden Hour board + Section 94 modal, Docker/nginx files, demo script all done. **One open item**: `docker compose up` smoke test from a clean clone — blocked on Docker Desktop WSL integration (enable it, or test from Windows PowerShell). Checkpoint 4 = joint demo rehearsal + that compose test.
+- **Report page**: preview iframe + 3 downloads verified against real backend (report.pdf 60KB, case.xlsx 16KB, standardized.pdf endpoint live). WeasyPrint works on this WSL directly too.
+- **Golden Hour**: freeze statuses live in localStorage per case (`tracenet.freeze.<caseId>`) — officer working state, not evidence; deliberately not a backend model.
+- **Deploy files**: compose (postgres+api+web:3000), nginx strips `/api` (trailing-slash proxy_pass), backend image bakes poppler/tesseract/pango, frontend image builds with `VITE_API_MODE=real`. Added `psycopg2-binary` to backend requirements (cross-lane, noted to A).
+- **A's remaining P4**: LLM assist, API hardening, embedding graph PNGs into the report.
+
+## Previous state (2026-07-02, late night — Phase 3)
 
 - **Phase**: 3 — **COMPLETE, Checkpoint 3 verified B-side** on branch `person-b/p3-visuals`. All Person B phases 1–3 done; only Phase 4 remains (reports UI, Golden Hour board, Docker/nginx, polish, demo script).
 - **Phase-3 deliverables**: FlowGraphPage (Cytoscape: size=throughput, color=suspicion, dashed=probable, loop highlighting + loop cards, PNG export, legend), GraphDrawers (node → account stats/badge/flagged txns with explanations; edge → transfer evidence incl. confirmed-vs-probable wording), MoneyTrailPage (flagged-credits-first picker, stop-rule toggle, hop table, recharts Sankey, "still resting" freeze callout), DashboardPage v2 (Analyze button, disposition donut, flagged timeline, common-identifiers panel), wizard AnalyzeStep (real POST /analyze + deep links), flagExplanations.ts.
@@ -69,6 +77,15 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 — Session 7: Phase 4 — reports UI, Golden Hour, ship files
+- Pulled main (P3 PR #4 merged). Merged `origin/person-a/p4-reports` into new branch `person-b/p4-reports-ship` (don't-wait rule): their report engine landed (preview HTML + 3 export endpoints, audit-logged).
+- **ReportPage**: case picker, sandboxed iframe preview (`srcDoc`), three download cards → real export URLs; mock mode = placeholder preview + disabled downloads (`IS_MOCK_MODE` + `exportDownloadUrl` exported from client).
+- **GoldenHourBoard + SummonsModal** on Dashboard (post-analysis): suspects from graph nodes, 4-state freeze tracker (localStorage), prefilled editable Section 94 BNSS notice → .txt download, status auto-advances to "Notice sent".
+- **Deployment**: docker-compose.yml, backend/frontend Dockerfiles, nginx.conf (`/api` strip!), .env.example, .dockerignores, psycopg2-binary dep. Compose build untested here — Docker Desktop WSL integration off (documented).
+- **demo-script.md**: 7-minute walkthrough, every beat tied to a mentor requirement, with fallbacks.
+- Verified against real backend: report preview HTML renders, report.pdf (60KB) + case.xlsx (16KB) download. Build + lint clean.
+- **Next session**: enable Docker WSL integration → clean-clone `docker compose up` test; joint Checkpoint-4 rehearsal; help A with anything left (LLM assist toggle UI?).
 
 ### 2026-07-02 (late night) — Session 6: Phase 3 visual analysis, real-wired
 - Pulled main: Person A had reconciled all my provisional P2 endpoints to real ones (stats/columns/template-apply — review accepts both flat & nested) AND shipped the full detection engine + analysis APIs. Branch `person-b/p3-visuals`.
