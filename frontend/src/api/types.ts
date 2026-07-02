@@ -275,6 +275,8 @@ export interface Disposition {
   buckets: Record<DispositionBucket, { amount: string; pct: number }>
 }
 
+export type ExportKind = 'report.pdf' | 'standardized.pdf' | 'case.xlsx'
+
 export type TrailStopRule = 'tranche' | 'balance'
 
 export interface TrailHop {

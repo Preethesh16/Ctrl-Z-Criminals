@@ -18,7 +18,16 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, late night)
+## Current state (updated: 2026-07-02, session 7)
+
+- **Phase**: 4 — **ALL Person B tasks complete and Docker-verified** on `person-b/p4-reports-ship`. `docker compose up --build` tested end-to-end on this machine: 3 containers healthy, all 9 forge formats parsed **including scanned-PDF OCR inside the container**, round trip detected, all 3 exports downloaded through nginx, running on postgres. Checkpoint 4 = joint demo rehearsal + clean-clone repeat on a second machine.
+- **Docker how-to on this machine**: WSL integration is OFF but Windows Docker Desktop is reachable via `"/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose ...` from the repo root. (Editing Docker Desktop's settings-store.json is permission-blocked — use docker.exe or enable integration manually in the GUI.) Stack left RUNNING on http://localhost:3000 after this session.
+- **Report page**: preview iframe + 3 downloads verified against real backend (report.pdf 60KB, case.xlsx 16KB, standardized.pdf endpoint live). WeasyPrint works on this WSL directly too.
+- **Golden Hour**: freeze statuses live in localStorage per case (`tracenet.freeze.<caseId>`) — officer working state, not evidence; deliberately not a backend model.
+- **Deploy files**: compose (postgres+api+web:3000), nginx strips `/api` (trailing-slash proxy_pass), backend image bakes poppler/tesseract/pango, frontend image builds with `VITE_API_MODE=real`. Added `psycopg2-binary` to backend requirements (cross-lane, noted to A).
+- **A's remaining P4**: LLM assist, API hardening, embedding graph PNGs into the report.
+
+## Previous state (2026-07-02, late night — Phase 3)
 
 - **Phase**: 3 — **COMPLETE, Checkpoint 3 verified B-side** on branch `person-b/p3-visuals`. All Person B phases 1–3 done; only Phase 4 remains (reports UI, Golden Hour board, Docker/nginx, polish, demo script).
 - **Phase-3 deliverables**: FlowGraphPage (Cytoscape: size=throughput, color=suspicion, dashed=probable, loop highlighting + loop cards, PNG export, legend), GraphDrawers (node → account stats/badge/flagged txns with explanations; edge → transfer evidence incl. confirmed-vs-probable wording), MoneyTrailPage (flagged-credits-first picker, stop-rule toggle, hop table, recharts Sankey, "still resting" freeze callout), DashboardPage v2 (Analyze button, disposition donut, flagged timeline, common-identifiers panel), wizard AnalyzeStep (real POST /analyze + deep links), flagExplanations.ts.
@@ -69,6 +78,21 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 — Session 8: Docker stack verified end-to-end
+- Discovered Docker Desktop was running and reachable from WSL via `docker.exe` (no setup needed) — `docker compose up --build` succeeded first try.
+- Containerized e2e: created case through nginx :3000 → uploaded all 9 forge formats → **scanned PDF parsed via OCR inside the container** (poppler/tesseract baked into the image — the one format this WSL can't do natively) → analyze found the planted round trip (46 txns, 34 flagged) → all 3 exports downloaded (report.pdf 60KB, standardized.pdf 32KB, case.xlsx 17KB) → postgres backing store, not sqlite.
+- Ticked the Docker Compose task in progress.md; Checkpoint 4 now only needs the joint rehearsal + clean-clone repeat on a second machine.
+- Stack left running on http://localhost:3000 (stop with `docker.exe compose down`).
+
+### 2026-07-02 — Session 7: Phase 4 — reports UI, Golden Hour, ship files
+- Pulled main (P3 PR #4 merged). Merged `origin/person-a/p4-reports` into new branch `person-b/p4-reports-ship` (don't-wait rule): their report engine landed (preview HTML + 3 export endpoints, audit-logged).
+- **ReportPage**: case picker, sandboxed iframe preview (`srcDoc`), three download cards → real export URLs; mock mode = placeholder preview + disabled downloads (`IS_MOCK_MODE` + `exportDownloadUrl` exported from client).
+- **GoldenHourBoard + SummonsModal** on Dashboard (post-analysis): suspects from graph nodes, 4-state freeze tracker (localStorage), prefilled editable Section 94 BNSS notice → .txt download, status auto-advances to "Notice sent".
+- **Deployment**: docker-compose.yml, backend/frontend Dockerfiles, nginx.conf (`/api` strip!), .env.example, .dockerignores, psycopg2-binary dep. Compose build untested here — Docker Desktop WSL integration off (documented).
+- **demo-script.md**: 7-minute walkthrough, every beat tied to a mentor requirement, with fallbacks.
+- Verified against real backend: report preview HTML renders, report.pdf (60KB) + case.xlsx (16KB) download. Build + lint clean.
+- **Next session**: enable Docker WSL integration → clean-clone `docker compose up` test; joint Checkpoint-4 rehearsal; help A with anything left (LLM assist toggle UI?).
 
 ### 2026-07-02 (late night) — Session 6: Phase 3 visual analysis, real-wired
 - Pulled main: Person A had reconciled all my provisional P2 endpoints to real ones (stats/columns/template-apply — review accepts both flat & nested) AND shipped the full detection engine + analysis APIs. Branch `person-b/p3-visuals`.

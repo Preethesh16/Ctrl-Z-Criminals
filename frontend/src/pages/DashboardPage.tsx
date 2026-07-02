@@ -14,6 +14,7 @@ import type {
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { StatCard } from '../components/ui/StatCard'
+import { GoldenHourBoard } from '../components/GoldenHourBoard'
 import { formatINR } from '../lib/format'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
@@ -227,6 +228,12 @@ export function DashboardPage() {
               </div>
             </Card>
           </div>
+
+          {analyzed && (
+            <div className="mb-6">
+              <GoldenHourBoard key={`${selectedCase.id}-${analyzed}`} caseId={selectedCase.id} caseData={selectedCase} />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-6">
             <Card title="Flagged activity over time">
