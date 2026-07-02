@@ -19,6 +19,7 @@ import type {
   Disposition,
   DocumentColumns,
   DocumentOut,
+  ExportKind,
   JobOut,
   Page,
   RoundTrip,
@@ -33,6 +34,14 @@ import { mockAdapter } from './mocks/mockAdapter'
 
 const USE_REAL_API = import.meta.env.VITE_API_MODE === 'real'
 const API_BASE = '/api'
+
+/** True when running against mocks — pages disable server-only features (file downloads). */
+export const IS_MOCK_MODE = !USE_REAL_API
+
+/** Browser-navigable download URL (Content-Disposition attachment on the server). */
+export function exportDownloadUrl(caseId: string, kind: ExportKind): string {
+  return `${API_BASE}/cases/${caseId}/export/${kind}`
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -111,6 +120,13 @@ const realAdapter = {
   getDisposition: (caseId: string) => request<Disposition>(`/cases/${caseId}/disposition`),
   getTrail: (caseId: string, txnId: string, stopRule: TrailStopRule = 'tranche') =>
     request<Trail>(`/cases/${caseId}/trail/${txnId}?stop_rule=${stopRule}`),
+
+  /* Phase-4: investigation report preview (same template as the PDF). */
+  getReportPreviewHtml: async (caseId: string): Promise<string> => {
+    const response = await fetch(`${API_BASE}/cases/${caseId}/report/preview`)
+    if (!response.ok) throw new ApiError(response.status, await response.text())
+    return response.text()
+  },
 }
 
 export const api = USE_REAL_API ? realAdapter : mockAdapter

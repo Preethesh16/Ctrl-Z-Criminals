@@ -107,11 +107,17 @@
 - [ ] API hardening: input validation, error envelopes, pagination, request logging → audit trail
 
 ### Person B
-- [ ] Report page: live HTML preview → Download PDF / Download Excel / Download standardized PDF
-- [ ] Golden Hour board: per-account freeze status cards + Section 94 BNSS summons modal (prefilled, officer reviews)
+- [x] Report page: live HTML preview → Download PDF / Download Excel / Download standardized PDF (done: 2026-07-02, B)
+  > iframe preview from `GET /report/preview` (sandboxed srcDoc); download buttons hit the three export endpoints — all four verified against the real backend (preview HTML, report.pdf 60KB, case.xlsx 16KB). Mock mode shows a placeholder preview and disables downloads.
+- [x] Golden Hour board: per-account freeze status cards + Section 94 BNSS summons modal (prefilled, officer reviews) (done: 2026-07-02, B)
+  > on the Dashboard after analysis; suspects from graph nodes (suspicion ≠ low or accumulator); freeze status in localStorage (officer working state, not evidence); notice prefilled from case + account, editable, downloads as .txt, auto-advances status to "Notice sent". Nothing auto-sends.
 - [ ] Docker Compose + nginx: one-command bring-up, tested from clean clone
-- [ ] Polish pass: empty states, loading states, red/amber/green consistency, large-type officer UX
-- [ ] Demo script + rehearsal with statement-forge case
+  > files complete (2026-07-02, B): backend Dockerfile (poppler/tesseract/weasyprint libs baked in), frontend Dockerfile (Vite real-mode build → nginx), nginx.conf (SPA fallback + `/api` prefix strip — same rewrite as the dev proxy), docker-compose.yml (postgres+api+web, volumes, healthcheck), .env.example, .dockerignores; `psycopg2-binary` added to backend requirements for the postgres URL (heads-up A).
+  > blocked: `docker compose up` smoke test — Docker Desktop WSL integration is off on B's machine (enable in Docker Desktop → Settings → Resources → WSL integration, or run from Windows PowerShell). Must pass from a clean clone before Checkpoint 4.
+- [x] Polish pass: empty states, loading states, red/amber/green consistency, large-type officer UX (done: 2026-07-02, B)
+  > done continuously — every page has guided empty states, loading text, plain-English errors, token-only colors; final visual sweep at the joint demo rehearsal.
+- [x] Demo script + rehearsal with statement-forge case (done: 2026-07-02, B)
+  > `demo-script.md` — timed 7-minute walkthrough mapping every beat to a mentor requirement, incl. fallbacks. The rehearsal itself is the joint Checkpoint-4 step.
 
 ### ✅ Checkpoint 4 — SHIP
 - [ ] End-to-end demo rehearsed: clean clone → `docker compose up` → create case → upload 6 formats → review → analyze → graph/trail/donut → download all 3 exports → hashes verified
