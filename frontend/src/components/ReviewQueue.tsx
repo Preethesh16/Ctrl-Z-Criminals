@@ -10,8 +10,10 @@ import { slideUp, staggerContainer } from '../theme/motion'
 
 /** Plain-English reason the row landed in the queue. */
 function reasonFor(txn: TransactionOut): { label: string; className: string } {
-  if (txn.flags.includes('SUSPECTED_DUPLICATE'))
+  if (txn.flags.some((f) => f.rule === 'DUPLICATE-SUSPECT'))
     return { label: 'Possible duplicate', className: 'bg-warning-soft text-warning' }
+  if (txn.flags.some((f) => f.rule === 'FD-07-BALANCE-BREAK'))
+    return { label: 'Balance mismatch', className: 'bg-danger-soft text-danger' }
   return { label: 'Hard to read', className: 'bg-warning-soft text-warning' }
 }
 
@@ -177,7 +179,9 @@ function FixForm({
     try {
       await api.reviewTransaction(txn.id, {
         action: 'correct',
-        corrections: { txn_date: txnDate, amount_inr: cleaned, direction },
+        txn_date: txnDate,
+        amount_inr: cleaned,
+        direction,
       })
       onSaved()
     } catch {
