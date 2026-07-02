@@ -14,13 +14,29 @@ from .headermeta import extract_header_meta
 
 # Fallback line shape: date ... narration ... amount(s) [balance]
 # \s* after date: some banks glue the reference straight onto the date
-# ("06-05-2025S82656214 UPI/...").
+# ("06-05-2025S82656214 UPI/..."). Amounts may carry a glued or spaced
+# Cr/Dr suffix ("1,50,391.44Cr", "500.00 Cr") — parse_amount strips it.
+_AMT = r"-?[\d,]+\.\d{2}(?:\s?(?:CR|DR|Cr|Dr|cr|dr)\b\.?)?(?:\s*\((?:Dr|Cr)\))?"
 _LINE = re.compile(
     r"^(?P<date>\d{1,2}[-/. ]\w{3}[-/. ]\d{2,4}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*"
     r"(?P<body>.+?)\s+"
-    r"(?P<amt1>-?[\d,]+\.\d{2})(?:\s*\((?:Dr|Cr)\))?"
-    r"(?:\s+(?P<amt2>-?[\d,]+\.\d{2}))?"
-    r"(?:\s+(?P<amt3>-?[\d,]+\.\d{2}))?\s*$"
+    rf"(?P<amt1>{_AMT})"
+    rf"(?:\s+(?P<amt2>{_AMT}))?"
+    rf"(?:\s+(?P<amt3>{_AMT}))?\s*$"
+)
+
+# Second-chance shape, tried only when the strict regex matches NOTHING in a
+# document: optional leading serial number (BoM), optional trailing
+# non-amount tokens (PNB ledger user-ids "CDCI CDCI", channel words). The
+# negative lookahead stops trailing tokens from swallowing real amounts.
+_LINE_LOOSE = re.compile(
+    r"^(?:\d{1,4}\s+)?"
+    r"(?P<date>\d{1,2}[-/. ]\w{3}[-/. ]\d{2,4}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s*"
+    r"(?P<body>.+?)\s+"
+    rf"(?P<amt1>{_AMT})"
+    rf"(?:\s+(?P<amt2>{_AMT}))?"
+    rf"(?:\s+(?P<amt3>{_AMT}))?"
+    r"(?:\s+(?!\d[\d,]*\.\d{2})\S{1,12}){0,3}\s*$"
 )
 
 
@@ -85,13 +101,14 @@ def _line_to_row(m: re.Match) -> list:
     return [m.group("date"), m.group("body"), a, b, balance]
 
 
-def read_pdf_text_lines(path: str | Path) -> list[list]:
+def read_pdf_text_lines(path: str | Path, loose: bool = False) -> list[list]:
     """Regex line fallback over the raw text of every page."""
+    pattern = _LINE_LOOSE if loose else _LINE
     grid: list[list] = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             for line in (page.extract_text() or "").splitlines():
-                m = _LINE.match(line.strip())
+                m = pattern.match(line.strip())
                 if m:
                     grid.append(_line_to_row(m))
     return grid

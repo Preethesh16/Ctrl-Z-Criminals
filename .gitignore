@@ -32,3 +32,6 @@ tracenet.db
 .DS_Store
 .idea/
 .vscode/
+
+# generated demo data — regenerate: python tools/statement-forge/forge.py
+tools/statement-forge/out/

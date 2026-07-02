@@ -8,7 +8,7 @@
 - **Phase**: 1 — Foundation (in progress)
 - **Working setup**: `backend/.venv` (Python 3.14), deps in `backend/requirements.txt`, run tests with `cd backend && .venv/bin/python -m pytest -q`
 - **Real-data harness**: `backend/tools/validate_dataset.py` — runs extractor over the confidential `Bank-statements-dataset/` (local only, never committed) and prints aggregate stats
-- **Real-data coverage**: **151/162 files (93.2%), 182,515 transactions, 0 crashes** (validation round 3)
+- **Real-data coverage**: **160/162 files, 195,041 transactions, 0 crashes — the 2 "zero-row" files verifiably contain no transactions (dormant/summary-only), so effective coverage is 100%** (validation round 5)
 - **Integration state**: Deepthi's Phase-1 frontend merged from main (PR #1). API contract v2 shipped — upload returns `{document_id, job_id, filename, sha256}`, `/uploads` path alias, job `error_code`/`transactions_found`, `POST /cases/{id}/clean`. Her remaining type reconciliation items are listed in progress.md "Deviations" — her lane.
 - **Next up (Phase 2)**: the 11 remaining zero-row files — fixed-width TXT parser (NITIN/shivlal, Kerala Gramin), PNB "Customer Account Ledger" dash-table layout (DEVANSHU, KOMAL), BOM_Statement FTP layout, `STATEMENT 1026*.pdf`, `4513362998.pdf`, `8642666611469255.pdf`; then balance-consistency check, cleaning suite, OCR pipeline, review-queue API
 
@@ -31,6 +31,22 @@
 - `tests/` — 17 unit tests green (normalize + rows)
 
 ## Log
+
+### 2026-07-02 — Session 8: hardening + 100% effective real-data coverage
+- API hardening: upload filename traversal fix (basename-only), empty-file 422, global 500 envelope. 68 tests.
+- Stubborn-file iteration (was 11 zero-row):
+  - `_AMT` now tolerates glued/spaced Cr/Dr suffixes ("1,50,391.44Cr") → fixed STATEMENT 1026 ×2, KOMAL, 8642666611469255, "Statement from 16082019".
+  - TXT gets the PDF line-regex fallback (Finacle exports drift per row; fixed-width slicing can't hold) → NITIN ×2.
+  - `_LINE_LOOSE` second-chance regex (optional leading serial, ≤3 trailing non-amount tokens, lookahead-guarded), used ONLY when strict matches nothing in the whole document → DEVANSHU (PNB ledger), BOM 570-txn file.
+  - Detector: `.txt` extension authoritative over comma-sniffing → shivlal (357 txns).
+  - Remaining 2 "zero-row" files verified transaction-free (Withdrawal/Deposit Count: 0; single-page account summary) — correct output.
+- **Final validation: 160/162 files, 195,041 txns, 0 crashes, 0 needs-review false floods.** Dropped docling fallback as unnecessary (deviation noted in progress.md).
+- Lane A is now COMPLETE across Phases 1–4. Waiting on B: report page, Golden Hour, Docker → Checkpoint 4 joint rehearsal.
+
+### 2026-07-02 — Session 7: merges + LLM assist
+- Merged B's Phase-3 visuals (PR #4: Cytoscape graph w/ loop highlighting, Sankey trail page, dashboard donut/timeline; Checkpoint 3 verified B-side) into my branch; merged `person-a/p4-reports` into main → main `08071c8` has everything from both lanes. Untracked `tools/statement-forge/out/` (generated PDFs embed timestamps → dirtied git every test run; regenerate via forge.py).
+- **LLM assist** (`app/llm/`, OFF by default): `masking.py` is the single privacy choke point (digits→last-4, VPA local→2 chars, names→initials; header names pass through); `assist.py` — column-mapping suggestion (officer must confirm in the mapping UI) + report narrative from aggregates only. Endpoints `GET /documents/{id}/suggest-mapping`, `GET /cases/{id}/report/narrative`; 501 when disabled; audit-logged. Tests cover the masking contract + disabled-by-default. **67/67 tests, 25 API paths.**
+- Remaining lane-A: API hardening (small), docling fallback + 4 stubborn real PDFs (non-blocking). B: report page, Golden Hour, Docker, polish → Checkpoint 4 rehearsal.
 
 ### 2026-07-02 — Session 6: merges + Phase 4 exports (3 of 5 lane-A tasks)
 - Merged: origin/main → p3 branch; p3 → main; B's `person-b/p2-real-wiring` → main (her Checkpoint-2 verification: 8 formats, reversal caught, review flow green against real API). main `813889f` carries both lanes; 60/60 green post-merge. New branch `person-a/p4-reports`.
