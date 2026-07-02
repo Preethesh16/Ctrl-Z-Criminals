@@ -267,6 +267,54 @@ def _run_process_with_mapping(document_id: str, stored_path: str, job_id: str, m
         db.close()
 
 
+@app.get("/documents/{document_id}/suggest-mapping")
+def suggest_mapping(document_id: str, db: Session = Depends(get_db)) -> dict:
+    """LLM assist (optional): pre-fill the column-mapping UI. 501 when disabled."""
+    from .ingest.columns import score_header_row
+    from .ingest.router import read_any_grid
+    from .llm.assist import LlmDisabled, suggest_column_mapping
+    from .llm.masking import masked_samples
+
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    grid, _ = read_any_grid(_stored_path(doc))
+    header_idx = max(range(min(45, len(grid))), key=lambda i: score_header_row(grid[i]))
+    masked = masked_samples(grid, header_idx)
+    try:
+        mapping = suggest_column_mapping(masked)
+    except LlmDisabled as e:
+        raise HTTPException(501, str(e)) from None
+    db.add(AuditLog(case_id=doc.case_id, action="llm_mapping_suggested",
+                    detail={"document": doc.filename, "columns_sent": masked[0],
+                            "mapping": mapping}))
+    db.commit()
+    return {"document_id": document_id, "mapping": mapping,
+            "note": "suggestion only — officer must confirm in the mapping UI"}
+
+
+@app.get("/cases/{case_id}/report/narrative")
+def report_narrative_endpoint(case_id: str, db: Session = Depends(get_db)) -> dict:
+    """LLM assist (optional): plain-language narrative from aggregate numbers."""
+    from .llm.assist import LlmDisabled, report_narrative
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    if not get_settings().llm_enabled:
+        raise HTTPException(501, "LLM assist is disabled (set LLM_ENABLED=true)")
+    summary = _artifact(db, case_id, "summary")
+    loops = _artifact(db, case_id, "round_trips")
+    dispo = _artifact(db, case_id, "disposition")
+    try:
+        text = report_narrative(summary, loops, dispo)
+    except LlmDisabled as e:
+        raise HTTPException(501, str(e)) from None
+    db.add(AuditLog(case_id=case_id, action="llm_narrative_generated",
+                    detail={"chars": len(text)}))
+    db.commit()
+    return {"narrative": text}
+
+
 @app.get("/templates", response_model=list[BankTemplateOut])
 def list_templates(db: Session = Depends(get_db)):
     from .models import BankTemplate

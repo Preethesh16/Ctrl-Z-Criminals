@@ -103,7 +103,8 @@
 - [x] Investigation report PDF (WeasyPrint from Jinja2): case header, evidence chain w/ SHA-256, cleaning summary, round trips w/ edge evidence, disposition, correlation, flagged txns, legal clause mapping, audit trail (done: 2026-07-02, A)
   > note: embedded graph/Sankey images land when B's viz pages exist (export PNG → report asset)
 - [x] Excel export: multi-sheet workbook (Transactions, Flags, Round Trips, Accounts, Disposition, Audit) (done: 2026-07-02, A)
-- [ ] LLM assist (feature-flagged, default off): column-mapping suggestions + report narrative, masked samples only
+- [x] LLM assist (feature-flagged, default off): column-mapping suggestions + report narrative, masked samples only (done: 2026-07-02, A)
+  > `GET /documents/{id}/suggest-mapping` + `GET /cases/{id}/report/narrative`; 501 when disabled; single masking choke point (`app/llm/masking.py`) — headers + masked cells only; every call audit-logged. Keep LLM_ENABLED=false near the police dataset.
 - [ ] API hardening: input validation, error envelopes, pagination, request logging → audit trail
 
 ### Person B

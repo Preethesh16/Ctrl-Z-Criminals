@@ -32,6 +32,11 @@
 
 ## Log
 
+### 2026-07-02 — Session 7: merges + LLM assist
+- Merged B's Phase-3 visuals (PR #4: Cytoscape graph w/ loop highlighting, Sankey trail page, dashboard donut/timeline; Checkpoint 3 verified B-side) into my branch; merged `person-a/p4-reports` into main → main `08071c8` has everything from both lanes. Untracked `tools/statement-forge/out/` (generated PDFs embed timestamps → dirtied git every test run; regenerate via forge.py).
+- **LLM assist** (`app/llm/`, OFF by default): `masking.py` is the single privacy choke point (digits→last-4, VPA local→2 chars, names→initials; header names pass through); `assist.py` — column-mapping suggestion (officer must confirm in the mapping UI) + report narrative from aggregates only. Endpoints `GET /documents/{id}/suggest-mapping`, `GET /cases/{id}/report/narrative`; 501 when disabled; audit-logged. Tests cover the masking contract + disabled-by-default. **67/67 tests, 25 API paths.**
+- Remaining lane-A: API hardening (small), docling fallback + 4 stubborn real PDFs (non-blocking). B: report page, Golden Hour, Docker, polish → Checkpoint 4 rehearsal.
+
 ### 2026-07-02 — Session 6: merges + Phase 4 exports (3 of 5 lane-A tasks)
 - Merged: origin/main → p3 branch; p3 → main; B's `person-b/p2-real-wiring` → main (her Checkpoint-2 verification: 8 formats, reversal caught, review flow green against real API). main `813889f` carries both lanes; 60/60 green post-merge. New branch `person-a/p4-reports`.
 - **Reporting** (`app/reporting/`): one Jinja2 context builder feeds every output (preview and court PDF can never diverge).
