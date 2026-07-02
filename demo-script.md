@@ -1,9 +1,17 @@
 # TraceNet — 7-minute demo script (CIDECODE 2026)
 
-> Rehearse twice with both members. Uses ONLY synthetic statement-forge data
-> (`tools/statement-forge/out/`). Presenter A drives, Presenter B narrates.
-> Before starting: `docker compose up --build` (or dev servers), create NOTHING
-> in advance except having the app open on the Cases page.
+> Rehearse twice with both members. Uses ONLY synthetic statement-forge data.
+> Presenter A drives, Presenter B narrates.
+>
+> **Setup (before the audience arrives):**
+> 1. `docker compose up --build` → app on http://localhost:3000
+> 2. Generate the demo files (they are NOT in git). No host dependencies needed —
+>    use the api image, which has poppler/tesseract baked in:
+>    `docker run --rm -v "<repo>/tools:/tools" ctrl-z-criminals-api python /tools/statement-forge/forge.py /tools/statement-forge/out`
+>    (Host alternative if poppler+tesseract are installed:
+>    `backend/.venv/bin/python tools/statement-forge/forge.py tools/statement-forge/out`)
+> 3. Create NOTHING in the app in advance except having it open on Cases.
+> 4. Keep `LLM_ENABLED=false` (default) — the demo story is offline-first.
 
 ## 0:00 — The problem (30s, no screen)
 
