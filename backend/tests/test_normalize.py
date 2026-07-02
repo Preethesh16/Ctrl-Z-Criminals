@@ -83,3 +83,10 @@ class TestReference:
         cp_id, cp_name = extract_counterparty("UPI/DR/436512345678/RAMESH KUMAR/OKAX/ramesh.k@okaxis/pay")
         assert cp_id == "ramesh.k@okaxis"
         assert cp_name == "Ramesh Kumar"
+
+
+def test_glued_drcr_suffix():
+    """No \\b exists between digit and letter — '0.06Cr' must still parse."""
+    assert parse_amount("11,000.00Cr") == (Decimal("11000.00"), "CREDIT")
+    assert parse_amount("1,50,391.44Dr") == (Decimal("150391.44"), "DEBIT")
+    assert parse_amount("0.0000CR") == (Decimal("0.00"), "CREDIT")

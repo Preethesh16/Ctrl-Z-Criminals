@@ -9,7 +9,10 @@ import re
 from decimal import Decimal, InvalidOperation
 
 _CLEAN_RE = re.compile(r"[₹,\s]|Rs\.?|INR", re.IGNORECASE)
-_DRCR_RE = re.compile(r"\b(DR|CR|DEBIT|CREDIT)\.?\s*$", re.IGNORECASE)
+# (?<![A-Za-z]) instead of \b: "0.06Cr" has NO word boundary between the
+# digit and "Cr" (both are \w), so \b silently failed on glued suffixes —
+# the lookbehind only requires the char before DR/CR to not be a letter.
+_DRCR_RE = re.compile(r"(?<![A-Za-z])(DR|CR|DEBIT|CREDIT)\.?\s*$", re.IGNORECASE)
 
 
 def parse_amount(value) -> tuple[Decimal | None, str | None]:

@@ -101,16 +101,41 @@ def _line_to_row(m: re.Match) -> list:
     return [m.group("date"), m.group("body"), a, b, balance]
 
 
+_NOISE_LINE = re.compile(
+    r"^-{4,}|^={4,}|Page\s+\d+|^Transaction Details|^Statement of|^A/C |^Address|"
+    r"^MICR|^IFSC|^HELPLINE|^BRANCH|^Note[:\s]|^Unless the|^Total[:\s]|^Page Total",
+    re.IGNORECASE,
+)
+_HAS_AMOUNT = re.compile(r"\d[\d,]*\.\d{2}")
+
+
+def collect_text_lines(text: str, grid: list[list], pattern: re.Pattern = _LINE) -> None:
+    """Append transaction rows found in `text` to `grid`.
+
+    Lines that don't match but carry no amounts are treated as narration
+    continuations of the previous transaction (BoB prints the full
+    UPI/IMPS reference on the NEXT line — losing it would break
+    cross-statement linking).
+    """
+    for line in text.splitlines():
+        stripped = line.strip()
+        m = pattern.match(stripped)
+        if m:
+            grid.append(_line_to_row(m))
+        elif (grid and len(grid[-1]) == 5 and stripped and len(stripped) < 120
+              and not _NOISE_LINE.search(stripped)
+              and not _HAS_AMOUNT.search(stripped)):
+            # only extend rows created by this regex (5-col), never table rows
+            grid[-1][1] = f"{grid[-1][1]} {stripped}"
+
+
 def read_pdf_text_lines(path: str | Path, loose: bool = False) -> list[list]:
     """Regex line fallback over the raw text of every page."""
     pattern = _LINE_LOOSE if loose else _LINE
     grid: list[list] = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
-            for line in (page.extract_text() or "").splitlines():
-                m = pattern.match(line.strip())
-                if m:
-                    grid.append(_line_to_row(m))
+            collect_text_lines(page.extract_text() or "", grid, pattern)
     return grid
 
 
@@ -128,10 +153,8 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
                     grid.extend([[c for c in row] for row in t])
             else:
                 # regex fallback per text line → synthetic 5-col rows
-                for line in (page.extract_text() or "").splitlines():
-                    m = _LINE.match(line.strip())
-                    if m:
-                        grid.append(_line_to_row(m))
+                # (with continuation-line narration capture)
+                collect_text_lines(page.extract_text() or "", grid)
     meta = extract_header_meta(full_text_head)
     return explode_multiline_rows(grid), meta
 
