@@ -74,3 +74,21 @@ def test_review_flow():
     r = client.post(f"/cases/{case_id}/clean")
     assert r.status_code == 200
     assert set(r.json()) == {"transactions", "balance_breaks", "duplicate_pairs", "reversal_pairs"}
+
+
+def test_template_save_and_upsert():
+    body = {"name": "PNB ledger", "bank": "PNB",
+            "header_signature": "trans dt|particulars|debit|credit|balance",
+            "mapping": {"date": 0, "narration": 1, "debit": 2, "credit": 3, "balance": 4}}
+    r = client.post("/templates", json=body)
+    assert r.status_code == 200, r.text
+    tid = r.json()["id"]
+
+    # same signature → update, not duplicate
+    body["name"] = "PNB ledger v2"
+    r = client.post("/templates", json=body)
+    assert r.json()["id"] == tid
+    assert r.json()["name"] == "PNB ledger v2"
+
+    names = [t["name"] for t in client.get("/templates").json()]
+    assert names.count("PNB ledger v2") == 1
