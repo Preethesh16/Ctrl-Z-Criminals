@@ -20,7 +20,8 @@
 
 ## Current state (updated: 2026-07-02, session 7)
 
-- **Phase**: 4 — **Person B tasks effectively complete** on `person-b/p4-reports-ship` (merged A's `person-a/p4-reports` in). Report page, Golden Hour board + Section 94 modal, Docker/nginx files, demo script all done. **One open item**: `docker compose up` smoke test from a clean clone — blocked on Docker Desktop WSL integration (enable it, or test from Windows PowerShell). Checkpoint 4 = joint demo rehearsal + that compose test.
+- **Phase**: 4 — **ALL Person B tasks complete and Docker-verified** on `person-b/p4-reports-ship`. `docker compose up --build` tested end-to-end on this machine: 3 containers healthy, all 9 forge formats parsed **including scanned-PDF OCR inside the container**, round trip detected, all 3 exports downloaded through nginx, running on postgres. Checkpoint 4 = joint demo rehearsal + clean-clone repeat on a second machine.
+- **Docker how-to on this machine**: WSL integration is OFF but Windows Docker Desktop is reachable via `"/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose ...` from the repo root. (Editing Docker Desktop's settings-store.json is permission-blocked — use docker.exe or enable integration manually in the GUI.) Stack left RUNNING on http://localhost:3000 after this session.
 - **Report page**: preview iframe + 3 downloads verified against real backend (report.pdf 60KB, case.xlsx 16KB, standardized.pdf endpoint live). WeasyPrint works on this WSL directly too.
 - **Golden Hour**: freeze statuses live in localStorage per case (`tracenet.freeze.<caseId>`) — officer working state, not evidence; deliberately not a backend model.
 - **Deploy files**: compose (postgres+api+web:3000), nginx strips `/api` (trailing-slash proxy_pass), backend image bakes poppler/tesseract/pango, frontend image builds with `VITE_API_MODE=real`. Added `psycopg2-binary` to backend requirements (cross-lane, noted to A).
@@ -77,6 +78,12 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-02 — Session 8: Docker stack verified end-to-end
+- Discovered Docker Desktop was running and reachable from WSL via `docker.exe` (no setup needed) — `docker compose up --build` succeeded first try.
+- Containerized e2e: created case through nginx :3000 → uploaded all 9 forge formats → **scanned PDF parsed via OCR inside the container** (poppler/tesseract baked into the image — the one format this WSL can't do natively) → analyze found the planted round trip (46 txns, 34 flagged) → all 3 exports downloaded (report.pdf 60KB, standardized.pdf 32KB, case.xlsx 17KB) → postgres backing store, not sqlite.
+- Ticked the Docker Compose task in progress.md; Checkpoint 4 now only needs the joint rehearsal + clean-clone repeat on a second machine.
+- Stack left running on http://localhost:3000 (stop with `docker.exe compose down`).
 
 ### 2026-07-02 — Session 7: Phase 4 — reports UI, Golden Hour, ship files
 - Pulled main (P3 PR #4 merged). Merged `origin/person-a/p4-reports` into new branch `person-b/p4-reports-ship` (don't-wait rule): their report engine landed (preview HTML + 3 export endpoints, audit-logged).
