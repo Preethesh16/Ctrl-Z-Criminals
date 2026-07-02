@@ -8,7 +8,7 @@
 - **Phase**: 1 — Foundation (in progress)
 - **Working setup**: `backend/.venv` (Python 3.14), deps in `backend/requirements.txt`, run tests with `cd backend && .venv/bin/python -m pytest -q`
 - **Real-data harness**: `backend/tools/validate_dataset.py` — runs extractor over the confidential `Bank-statements-dataset/` (local only, never committed) and prints aggregate stats
-- **Real-data coverage**: **151/162 files (93.2%), 182,515 transactions, 0 crashes** (validation round 3)
+- **Real-data coverage**: **160/162 files, 195,041 transactions, 0 crashes — the 2 "zero-row" files verifiably contain no transactions (dormant/summary-only), so effective coverage is 100%** (validation round 5)
 - **Integration state**: Deepthi's Phase-1 frontend merged from main (PR #1). API contract v2 shipped — upload returns `{document_id, job_id, filename, sha256}`, `/uploads` path alias, job `error_code`/`transactions_found`, `POST /cases/{id}/clean`. Her remaining type reconciliation items are listed in progress.md "Deviations" — her lane.
 - **Next up (Phase 2)**: the 11 remaining zero-row files — fixed-width TXT parser (NITIN/shivlal, Kerala Gramin), PNB "Customer Account Ledger" dash-table layout (DEVANSHU, KOMAL), BOM_Statement FTP layout, `STATEMENT 1026*.pdf`, `4513362998.pdf`, `8642666611469255.pdf`; then balance-consistency check, cleaning suite, OCR pipeline, review-queue API
 
@@ -31,6 +31,17 @@
 - `tests/` — 17 unit tests green (normalize + rows)
 
 ## Log
+
+### 2026-07-02 — Session 8: hardening + 100% effective real-data coverage
+- API hardening: upload filename traversal fix (basename-only), empty-file 422, global 500 envelope. 68 tests.
+- Stubborn-file iteration (was 11 zero-row):
+  - `_AMT` now tolerates glued/spaced Cr/Dr suffixes ("1,50,391.44Cr") → fixed STATEMENT 1026 ×2, KOMAL, 8642666611469255, "Statement from 16082019".
+  - TXT gets the PDF line-regex fallback (Finacle exports drift per row; fixed-width slicing can't hold) → NITIN ×2.
+  - `_LINE_LOOSE` second-chance regex (optional leading serial, ≤3 trailing non-amount tokens, lookahead-guarded), used ONLY when strict matches nothing in the whole document → DEVANSHU (PNB ledger), BOM 570-txn file.
+  - Detector: `.txt` extension authoritative over comma-sniffing → shivlal (357 txns).
+  - Remaining 2 "zero-row" files verified transaction-free (Withdrawal/Deposit Count: 0; single-page account summary) — correct output.
+- **Final validation: 160/162 files, 195,041 txns, 0 crashes, 0 needs-review false floods.** Dropped docling fallback as unnecessary (deviation noted in progress.md).
+- Lane A is now COMPLETE across Phases 1–4. Waiting on B: report page, Golden Hour, Docker → Checkpoint 4 joint rehearsal.
 
 ### 2026-07-02 — Session 7: merges + LLM assist
 - Merged B's Phase-3 visuals (PR #4: Cytoscape graph w/ loop highlighting, Sankey trail page, dashboard donut/timeline; Checkpoint 3 verified B-side) into my branch; merged `person-a/p4-reports` into main → main `08071c8` has everything from both lanes. Untracked `tools/statement-forge/out/` (generated PDFs embed timestamps → dirtied git every test run; regenerate via forge.py).

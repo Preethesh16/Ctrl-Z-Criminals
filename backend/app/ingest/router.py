@@ -140,6 +140,11 @@ def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = Non
                 if fallback:
                     info["extraction_mode"] = "pdf_text_regex_retry"
                     txns, ginfo = grid_to_txns([FALLBACK_HEADER, *fallback], base_confidence=0.85)
+                else:
+                    loose = read_pdf_text_lines(path, loose=True)
+                    if loose:
+                        info["extraction_mode"] = "pdf_text_regex_loose"
+                        txns, ginfo = grid_to_txns([FALLBACK_HEADER, *loose], base_confidence=0.75)
         if info["extraction_mode"].startswith("pdf_text_regex"):
             # Regex fallback can't know column order/direction — balance
             # deltas are the ground truth.
@@ -177,6 +182,24 @@ def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = Non
         grid = read_txt_fixed_width(path)
         info["header_meta"] = _meta_from_grid(grid)
         txns, ginfo = grid_to_txns(grid, base_confidence=0.8)
+        if not txns:
+            # Misaligned columns (Finacle exports drift per row) — fall back
+            # to the same line regex used for PDFs; balance deltas repair
+            # directions afterwards.
+            from .pdf_digital import _LINE, _LINE_LOOSE, _line_to_row
+
+            for pattern, mode, conf in ((_LINE, "txt_line_regex", 0.8),
+                                        (_LINE_LOOSE, "txt_line_regex_loose", 0.7)):
+                line_grid = []
+                for ln in path.read_text(errors="replace").splitlines():
+                    m = pattern.match(ln.strip())
+                    if m:
+                        line_grid.append(_line_to_row(m))
+                if line_grid:
+                    info["extraction_mode"] = mode
+                    txns, ginfo = grid_to_txns([FALLBACK_HEADER, *line_grid], base_confidence=conf)
+                    info["directions_repaired"] = repair_directions(txns)
+                    break
     else:
         raise UnsupportedFormat(f"unsupported file kind: {kind}")
 

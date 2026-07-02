@@ -34,6 +34,10 @@ def detect_file_kind(path: str | Path, content_head: bytes | None = None) -> str
         sample = head.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
         sample = head.decode("latin-1", errors="replace")
+    if ext == ".txt":
+        # a .txt statement may CONTAIN commas (PNB ledger reports) — the
+        # extension is authoritative for the fixed-width/line-regex path
+        return "txt" if sample.strip() else "unknown"
     if ext == ".csv" or sample.count(",") > 10 or sample.count("\t") > 10:
         return "csv"
     if sample.strip():
