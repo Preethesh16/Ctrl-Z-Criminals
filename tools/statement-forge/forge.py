@@ -219,7 +219,8 @@ def write_html_xls(a: Account, path: Path):
         for dt, narr, dr, cr, bal in a.rows
     )
     path.write_text(
-        f"<html><body><h3>{a.bank} BANK — {a.number} — {a.name}</h3>"
+        f"<html><body><h3>{a.bank} BANK</h3>"
+        f"<p>Account No: {a.number}</p><p>Customer Name: {a.name}</p>"
         f"<table border=1><tr><th>Tran Date</th><th>Particulars</th><th>Debit</th>"
         f"<th>Credit</th><th>Balance</th></tr>{rows}</table></body></html>"
     )

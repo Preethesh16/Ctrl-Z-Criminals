@@ -32,6 +32,22 @@
 
 ## Log
 
+### 2026-07-02 — Session 5: DETECTION ENGINE COMPLETE (all Phase 3 lane-A tasks)
+- Branch `person-a/p3-detection` (main was merged first; Checkpoint 1 landed via B's PR #2).
+- Reconciled B's provisional endpoints for real: `GET /cases/{id}/stats` (her CaseStats shape), `GET /documents/{id}/columns`, `POST /documents/{id}/template` (her index→field mapping; saves BankTemplate; re-parses), saved-template auto-retry on zero-row parses, review accepts nested `corrections`.
+- **Detection engine** (`app/detection/`):
+  - `flowgraph.py` — edges in 3 evidence tiers: confirmed (RRN/UTR both-leg match), probable (±2% amount within 30min/same-day), external (counterparty nodes); node table with accumulator badge.
+  - `roundtrip.py` — time-respecting bounded DFS (non-decreasing timestamps for date-granularity data, hop≤6, in/out seed filtering), rotation-aware, loop scoring (amount/speed/%returned/confirmed-share). Key insight encoded in tests: a cycle is temporal iff SOME rotation is time-ordered; only all-descending cycles are rejected.
+  - `fifo_trail.py` — tranche queue with split attribution, stop rules (tranche|balance), resting-amount report.
+  - `rules.py` — FD-01 round-figure, FD-02 rapid in-out, FD-03 odd-hour, FD-04 smurfing, FD-05 velocity, FD-06 new-account, FD-08 dominance; every flag carries `why` + evidence values.
+  - `anomaly.py` — local IsolationForest (log-amount, hour, dow, channel, account z-score), ≥30 rows.
+  - `correlation.py`, `disposition.py` — common identifiers, % cash/cheque/redirected buckets.
+- `services/analysis.py` — one-button orchestrator (cleaning→rules→ML→graph→loops→evidence gate ≥2 signals→artifacts stored in `analysis_results`). APIs: POST `/cases/{id}/analyze`; GET `graph` (Cytoscape elements), `round-trips`, `correlation`, `disposition`, `trail/{txn_id}?stop_rule=`.
+- Extraction fixes found by the golden e2e: fixed-width TXT reader (data-occupancy column inference — naive 2-space split dropped empty debit cells and mis-directioned credits); header meta now extracted for ALL tabular formats (account_ref = real account number everywhere); HTML meta from tag-stripped text.
+- **Golden e2e green: all 9 forge formats uploaded (incl. scanned via OCR) → analyze → planted loop m3→m4→m5→m1 found, smurfing (6 credits) flagged, cash% > 10, confirmed edges present, FIFO trail arithmetic exact. 60/60 tests.**
+- Person B can now build: Cytoscape graph page, trail Sankey, dashboard donut — every endpoint is live in openapi.json.
+- Next (Phase 4): standardized extraction PDF, investigation report PDF, Excel export, LLM assist, hardening. Remaining P2 stragglers: docling fallback, 4 stubborn real-PDF layouts.
+
 ### 2026-07-02 — Session 4: Checkpoint 1 passed; OCR + DOCX + templates
 - Pulled main: Deepthi reconciled the API layer to the contract and **verified Checkpoint 1 end-to-end** (UI → /api proxy → FastAPI → 47 txns). Phase 1 fully closed.
 - **OCR pipeline** (`ingest/ocr.py`, `ocr_preprocess.py`): pdf2image rasterize → OpenCV deskew/denoise/adaptive-threshold → pluggable engine (PaddleOCR if installed, else Tesseract via pytesseract) → OCR lines with confidence → same `_LINE` regex path as digital PDFs → per-line OCR confidence blended into row confidence → direction repair. Scanned PDFs and photo uploads route through it. ⚠ validation blocked: `tesseract` binary not installed yet on this machine (`sudo pacman -S tesseract tesseract-data-eng`); golden test auto-skips.
