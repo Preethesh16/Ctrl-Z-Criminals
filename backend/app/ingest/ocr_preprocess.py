@@ -30,10 +30,30 @@ def deskew(gray: np.ndarray, max_angle: float = 8.0) -> np.ndarray:
                           borderMode=cv2.BORDER_REPLICATE)
 
 
+def remove_table_rules(gray: np.ndarray, min_len: int = 60) -> np.ndarray:
+    """Paint out long horizontal/vertical strokes (table grid lines).
+
+    Ruled statement tables wreck Tesseract's line segmentation — with rules
+    removed, each transaction row OCRs as one clean text line.
+    """
+    binv = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    horiz = cv2.morphologyEx(binv, cv2.MORPH_OPEN,
+                             cv2.getStructuringElement(cv2.MORPH_RECT, (min_len, 1)))
+    vert = cv2.morphologyEx(binv, cv2.MORPH_OPEN,
+                            cv2.getStructuringElement(cv2.MORPH_RECT, (1, min_len)))
+    clean = gray.copy()
+    clean[(horiz > 0) | (vert > 0)] = 255
+    return clean
+
+
 def preprocess(image_bgr: np.ndarray) -> np.ndarray:
-    """Full preprocessing chain; returns a binarized image for OCR."""
+    """Full chain: gray → deskew → denoise → rule removal.
+
+    Returns grayscale (not binarized): Tesseract's internal Otsu handles
+    clean scans better than a fixed adaptive threshold, which was measured
+    to destroy small table text.
+    """
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY) if image_bgr.ndim == 3 else image_bgr
     gray = deskew(gray)
     gray = cv2.fastNlMeansDenoising(gray, h=10)
-    return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                 cv2.THRESH_BINARY, 31, 15)
+    return remove_table_rules(gray)

@@ -255,7 +255,8 @@ def write_scanned_pdf(a: Account, path: Path):
     with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
         write_pdf(a, Path(tmp.name))
         pages = convert_from_path(tmp.name, dpi=200)
-    pages[0].save(str(path), save_all=True, append_images=pages[1:])
+    # resolution must match the render DPI or the PDF page becomes 23x32in
+    pages[0].save(str(path), save_all=True, append_images=pages[1:], resolution=200)
 
 
 WRITERS = [

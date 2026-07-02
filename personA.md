@@ -39,7 +39,13 @@
 - **statement-forge v2**: mule6 now DOCX, mule8 a 200-DPI image-only scanned PDF (exercises OCR); stale-output cleanup; DOCX round-trip green in golden tests.
 - **Saved-template API**: `BankTemplate` model + GET/POST `/templates` (upsert by normalized header signature) — backend for Deepthi's column-mapping UI. Auto-application at parse time still TODO (bank-templates task).
 - Tests: 38 passing. Contract regenerated. New deps: pdf2image, opencv-python-headless, pytesseract, python-docx.
-- Next: install tesseract → validate OCR on forge scanned PDF + the real dataset's image-like PDFs; template auto-application; 4 stubborn PDF layouts; then Phase 3 detection.
+- Next: template auto-application; 4 stubborn PDF layouts; then Phase 3 detection.
+
+### 2026-07-02 — Session 4b: OCR validated end-to-end
+- Tesseract was present all along (`/usr/bin/tesseract`; earlier sandbox PATH check lied). Golden scanned-PDF test initially failed — two real bugs found:
+  1. PIL writes image-PDFs with no DPI ⇒ pdf2image re-render exploded to 9746×6892 px and Tesseract collapsed. Fix: `resolution=200` in forge writer + defensive 3600px cap in `ocr_image` (protects against phone photos too).
+  2. Ruled table grid lines wreck Tesseract line segmentation (table OCR'd as one garbage line). Fix: morphology-based `remove_table_rules()` (open with 60px h/v kernels, paint white); also dropped the adaptive threshold — measured worse than Tesseract's internal Otsu on clean scans.
+- After fixes: scanned statement OCRs cleanly (`09-05-2026 POS ... 1567.00 11249.00`), full suite 38/38 with the OCR golden test actually executing.
 
 ### 2026-07-02 — Session 3: direction repair + statement-forge + review API
 - Balance audit round 1 exposed a systematic bug: `pdf_text_regex` fallback dropped credit rows (`0.00 | 500.00 | bal` → amount 0 → skipped) and guessed all directions as DEBIT. Fixes:
