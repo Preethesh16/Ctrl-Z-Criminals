@@ -79,6 +79,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-02 — Session 10: Checkpoint 4 clean-clone rehearsal — ALL BOXES TICKED
+- Pulled main (A's final balance-audit log). The last unticked box was Checkpoint 4.
+- Cloned the repo fresh from GitHub into `/mnt/c/Deepthi_Files/Hacathon/tracenet-clean-test`, `docker compose -p tracenet-clean up --build` → 3 healthy containers.
+- Full demo sequence through the clone's nginx: forge via container → case CEN/REHEARSAL/2026 → 9 formats parsed (incl. OCR) → **9/9 SHA-256 hashes verified** local-vs-Evidence-Locker → analyze (46 txns, 34 flagged, round trip found, 3 identifiers) → donut/trail render payloads → 3 exports downloaded.
+- progress.md is now **100% ticked**. Only human step left: the spoken 7-minute rehearsal, both members, script in demo-script.md.
+- Housekeeping: clean-test stack torn down; original project stack restarted on :3000 (previous demo cases intact in the `ctrl-z-criminals` volumes); clone kept at `tracenet-clean-test/` for reference (delete freely).
+
 ### 2026-07-02 — Session 9: final merge to main (SHIP state)
 - Pulled main: A finished their last P4 items (LLM assist behind flag, API hardening, 160/162 real-file coverage, docling dropped as a recorded deviation) and **untracked the generated forge outputs** — demo files must now be regenerated via forge.py.
 - Merged main into my branch (one conflict: requirements.txt — kept both `anthropic` and `psycopg2-binary`). Backend tests on merged code: 55 pass; the 13 golden-test errors are the known poppler fixture gap on this machine (they pass on A's machine and the flows are Docker-verified).

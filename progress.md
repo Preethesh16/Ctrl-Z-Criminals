@@ -121,7 +121,8 @@
   > `demo-script.md` — timed 7-minute walkthrough mapping every beat to a mentor requirement, incl. fallbacks. The rehearsal itself is the joint Checkpoint-4 step.
 
 ### ✅ Checkpoint 4 — SHIP
-- [ ] End-to-end demo rehearsed: clean clone → `docker compose up` → create case → upload 6 formats → review → analyze → graph/trail/donut → download all 3 exports → hashes verified
+- [x] End-to-end demo rehearsed: clean clone → `docker compose up` → create case → upload 6 formats → review → analyze → graph/trail/donut → download all 3 exports → hashes verified (done: 2026-07-02, B)
+  > technical rehearsal executed on a LITERAL clean clone (`git clone` from GitHub → `docker compose up --build`, isolated project name): forge data generated via the api container → case created → **all 9 formats uploaded and parsed incl. scanned-PDF OCR** → **9/9 SHA-256 hashes match** between local files and the Evidence Locker → analyze: 46 txns, 34 flagged, **planted round trip detected** (5-hop loop), 3 common identifiers → disposition (cash 11% / redirected 83.1%) → FIFO trail ₹1.8L across 8 hops → all 3 exports downloaded through nginx (report.pdf 60KB / standardized.pdf 32KB / case.xlsx 17KB). Remaining: the SPOKEN 7-minute rehearsal with both members (demo-script.md), ideally on the second laptop.
 
 ---
 
