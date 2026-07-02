@@ -41,6 +41,12 @@
 - Final validation: **160/162, 195,041 txns, 0 crashes**; channel classification improved (UNKNOWN −2.1k, refs recovered feed NEFT/IMPS/CHEQUE up). 69/69 tests.
 - Lane A closed. **Final balance-audit: 112/148 balance-bearing docs reconcile perfectly (was 78 at first measurement); of the 36 with breaks, all but one are ≤8.5% break-rate (statement quirks FD-07 correctly surfaces).**
 
+### 2026-07-03 — Session 11: .env setup + Neon connection verified
+- Created `backend/.env.example` (was documented in dbguide.md but never actually committed) and the real `backend/.env` (git-ignored — confirmed via `git status --ignored` before touching anything).
+- Wired `.env` to the team's Neon Postgres project (ap-southeast-1) with a freshly generated `SECRET_KEY`. **Live connection verified**: `SELECT version()` → PostgreSQL 18.4.
+- Found and fixed a real driver mismatch: `requirements.txt` only had `psycopg2-binary` (Docker Compose's internal DB uses `postgresql+psycopg2://`) but the config default / dbguide / Neon setup all use `postgresql+psycopg://` (psycopg3 dialect) — the two schemes need different drivers. Added `psycopg[binary]` alongside `psycopg2-binary` rather than swapping, so Deepthi's already-verified Docker path stays untouched while Neon dev connections work too. 69/69 tests still pass after reinstall.
+- ⚠️ Note for whoever reads this: the Neon password was pasted in plaintext during setup chat — flagged for rotation (Neon dashboard → Settings → Reset password). Real `.env` values are never committed or read back by Claude Code (settings.json denies it); validated indirectly via the app's own config loader instead.
+
 ### 2026-07-03 — Session 10: soa fixed (last known misparse)
 - `soa_0167042251865512.pdf` (AU Bank web export, 222 pages): txn lines carry `amount rate lcy_amount` with the TRUE balance alone on the next line — parser took the LCY duplicate as balance (97.6% breaks). Fix in `collect_text_lines`: lone-amount follow-up line becomes the row's balance; when the captured balance equalled the amount (LCY duplicate), the middle rate column is dropped as noise. Result: **4.3% breaks, full balance chain, 642 credits repaired, refs extracted.** 69/69 tests. No known systematic misparses remain.
 
