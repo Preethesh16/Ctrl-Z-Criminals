@@ -9,15 +9,15 @@
 ## Phase 1 — Foundation
 
 ### Person A
-- [ ] Repo scaffold: backend project, requirements.txt, config, SQLAlchemy setup (Postgres + SQLite fallback)
-- [ ] DB models: Case, Document, Transaction, Account, Flag, Job, AuditLog
-- [ ] Canonical transaction schema (Pydantic) per plan.md §4.1 proposal schema
-- [ ] Digital PDF parser (pdfplumber) with header-block extraction
-- [ ] Excel (XLSX/XLS) parser with header-row auto-detection
-- [ ] CSV/TSV parser with dialect sniffing
-- [ ] Normalization: dates (all Indian formats), amounts (1,00,000 / Dr-Cr / signed column), channel classifier, reference-ID extraction (RRN/UTR per-channel regex)
-- [ ] SHA-256 on upload + Evidence Locker records
-- [ ] API: cases, upload, job status, transactions list — **publish OpenAPI contract for Person B**
+- [x] Repo scaffold: backend project, requirements.txt, config, SQLAlchemy setup (Postgres + SQLite fallback) (done: 2026-07-02, A)
+- [x] DB models: Case, Document, Transaction, Account, Flag, Job, AuditLog (done: 2026-07-02, A)
+- [x] Canonical transaction schema (Pydantic) per plan.md §4.1 proposal schema (done: 2026-07-02, A)
+- [x] Digital PDF parser (pdfplumber) with header-block extraction (done: 2026-07-02, A)
+- [x] Excel (XLSX/XLS) parser with header-row auto-detection (done: 2026-07-02, A)
+- [x] CSV/TSV parser with dialect sniffing (done: 2026-07-02, A)
+- [x] Normalization: dates (all Indian formats), amounts (1,00,000 / Dr-Cr / signed column), channel classifier, reference-ID extraction (RRN/UTR per-channel regex) (done: 2026-07-02, A)
+- [x] SHA-256 on upload + Evidence Locker records (done: 2026-07-02, A)
+- [x] API: cases, upload, job status, transactions list — **publish OpenAPI contract for Person B** (done: 2026-07-02, A)
 
 ### Person B
 - [x] Frontend scaffold: Vite + React 18 + TS + Tailwind v4 + framer-motion + design-token theme & motion presets (done: 2026-07-02, setup)
