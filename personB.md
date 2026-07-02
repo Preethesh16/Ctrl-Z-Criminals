@@ -79,6 +79,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-02 — Session 9: final merge to main (SHIP state)
+- Pulled main: A finished their last P4 items (LLM assist behind flag, API hardening, 160/162 real-file coverage, docling dropped as a recorded deviation) and **untracked the generated forge outputs** — demo files must now be regenerated via forge.py.
+- Merged main into my branch (one conflict: requirements.txt — kept both `anthropic` and `psycopg2-binary`). Backend tests on merged code: 55 pass; the 13 golden-test errors are the known poppler fixture gap on this machine (they pass on A's machine and the flows are Docker-verified).
+- The test fixture wiped `tools/statement-forge/out/` again (now untracked = unrecoverable via git) → **regenerated all 9 files + manifest inside the api container** (`docker run -v tools:/tools ctrl-z-criminals-api python forge.py`) — no host poppler needed. Demo script updated with this as the canonical setup step.
+- **Merged everything to main and pushed** (user-authorized checkpoint merge; A had concurrently merged my branch too — final tip `403334d`). Main = complete TraceNet: all 4 phases, both lanes.
+- **Remaining before submission**: joint demo rehearsal (script ready) + clean-clone `docker compose up` on a second machine + verify report hashes match uploads live.
+
 ### 2026-07-02 — Session 8: Docker stack verified end-to-end
 - Discovered Docker Desktop was running and reachable from WSL via `docker.exe` (no setup needed) — `docker compose up --build` succeeded first try.
 - Containerized e2e: created case through nginx :3000 → uploaded all 9 forge formats → **scanned PDF parsed via OCR inside the container** (poppler/tesseract baked into the image — the one format this WSL can't do natively) → analyze found the planted round trip (46 txns, 34 flagged) → all 3 exports downloaded (report.pdf 60KB, standardized.pdf 32KB, case.xlsx 17KB) → postgres backing store, not sqlite.
