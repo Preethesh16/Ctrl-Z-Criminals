@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { CasesPage } from './pages/CasesPage'
 import { CaseWizardPage } from './pages/CaseWizardPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 
 function App() {
@@ -12,15 +13,7 @@ function App() {
           <Route path="/" element={<Navigate to="/cases" replace />} />
           <Route path="/cases" element={<CasesPage />} />
           <Route path="/cases/:caseId/wizard" element={<CaseWizardPage />} />
-          <Route
-            path="/dashboard"
-            element={
-              <PlaceholderPage
-                title="Dashboard"
-                description="Headline numbers, disposition donut, and the Golden Hour freeze board appear here once a case is analyzed (Phase 2–3)."
-              />
-            }
-          />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route
             path="/flow-graph"
             element={
