@@ -18,15 +18,19 @@ def test_upload_flow():
     case_id = r.json()["id"]
 
     r = client.post(
-        f"/cases/{case_id}/documents",
+        f"/cases/{case_id}/uploads",  # frontend-client alias path
         files={"file": ("stmt.csv", io.BytesIO(CSV), "text/csv")},
     )
     assert r.status_code == 200, r.text
-    job_id = r.json()["id"]
+    up = r.json()
+    assert set(up) == {"document_id", "job_id", "filename", "sha256"}
 
     # TestClient runs BackgroundTasks synchronously — job is done by now.
-    r = client.get(f"/jobs/{job_id}")
-    assert r.json()["status"] == "done", r.json()
+    r = client.get(f"/jobs/{up['job_id']}")
+    body = r.json()
+    assert body["status"] == "done", body
+    assert body["transactions_found"] == 2
+    assert body["document_id"] == up["document_id"]
 
     r = client.get(f"/cases/{case_id}/transactions")
     body = r.json()
@@ -41,3 +45,50 @@ def test_upload_flow():
         files={"file": ("stmt-copy.csv", io.BytesIO(CSV), "text/csv")},
     )
     assert r.status_code == 409
+
+
+def test_review_flow():
+    r = client.post("/cases", json={"fir_number": "TEST-0002/2026"})
+    case_id = r.json()["id"]
+    r = client.post(f"/cases/{case_id}/uploads",
+                    files={"file": ("s2.csv", io.BytesIO(CSV), "text/csv")})
+    assert r.status_code == 200
+    r = client.get(f"/cases/{case_id}/transactions")
+    txn = r.json()["items"][0]
+
+    # correct the amount
+    r = client.post(f"/transactions/{txn['id']}/review",
+                    json={"action": "correct", "amount_inr": "51000.00"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["amount_inr"] == "51000.00"
+    assert body["needs_review"] is False
+    assert body["extraction_confidence"] == 1.0
+
+    # exclude another row
+    txn2 = client.get(f"/cases/{case_id}/transactions").json()["items"][1]
+    r = client.post(f"/transactions/{txn2['id']}/review", json={"action": "exclude"})
+    assert r.json()["excluded"] is True
+
+    # cleaning endpoint runs and reports a summary
+    r = client.post(f"/cases/{case_id}/clean")
+    assert r.status_code == 200
+    assert set(r.json()) == {"transactions", "balance_breaks", "duplicate_pairs", "reversal_pairs"}
+
+
+def test_template_save_and_upsert():
+    body = {"name": "PNB ledger", "bank": "PNB",
+            "header_signature": "trans dt|particulars|debit|credit|balance",
+            "mapping": {"date": 0, "narration": 1, "debit": 2, "credit": 3, "balance": 4}}
+    r = client.post("/templates", json=body)
+    assert r.status_code == 200, r.text
+    tid = r.json()["id"]
+
+    # same signature → update, not duplicate
+    body["name"] = "PNB ledger v2"
+    r = client.post("/templates", json=body)
+    assert r.json()["id"] == tid
+    assert r.json()["name"] == "PNB ledger v2"
+
+    names = [t["name"] for t in client.get("/templates").json()]
+    assert names.count("PNB ledger v2") == 1

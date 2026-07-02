@@ -67,6 +67,24 @@ def explode_multiline_rows(grid: list[list]) -> list[list]:
     return out
 
 
+def _line_to_row(m: re.Match) -> list:
+    """Regex match → [date, narration, debit-ish, credit-ish, balance].
+
+    Column semantics are provisional — many bank layouts are
+    (debit, credit, balance) but some are (credit, debit, balance) and
+    two-amount lines are just (amount, balance). Directions are repaired
+    afterwards from balance deltas (see rows.repair_directions).
+    """
+    amts = [a for a in (m.group("amt1"), m.group("amt2"), m.group("amt3")) if a]
+    if len(amts) >= 3:
+        a, b, balance = amts[0], amts[1], amts[2]
+    elif len(amts) == 2:
+        a, b, balance = amts[0], None, amts[1]
+    else:
+        a, b, balance = amts[0], None, None
+    return [m.group("date"), m.group("body"), a, b, balance]
+
+
 def read_pdf_text_lines(path: str | Path) -> list[list]:
     """Regex line fallback over the raw text of every page."""
     grid: list[list] = []
@@ -74,11 +92,8 @@ def read_pdf_text_lines(path: str | Path) -> list[list]:
         for page in pdf.pages:
             for line in (page.extract_text() or "").splitlines():
                 m = _LINE.match(line.strip())
-                if not m:
-                    continue
-                amts = [a for a in (m.group("amt1"), m.group("amt2"), m.group("amt3")) if a]
-                balance = amts[-1] if len(amts) >= 2 else None
-                grid.append([m.group("date"), m.group("body"), amts[0], balance])
+                if m:
+                    grid.append(_line_to_row(m))
     return grid
 
 
@@ -95,22 +110,18 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
                 for t in tables:
                     grid.extend([[c for c in row] for row in t])
             else:
-                # regex fallback per text line → synthetic 4-col rows
+                # regex fallback per text line → synthetic 5-col rows
                 for line in (page.extract_text() or "").splitlines():
                     m = _LINE.match(line.strip())
-                    if not m:
-                        continue
-                    amts = [a for a in (m.group("amt1"), m.group("amt2"), m.group("amt3")) if a]
-                    balance = amts[-1] if len(amts) >= 2 else None
-                    amount = amts[0]
-                    grid.append([m.group("date"), m.group("body"), amount, balance])
+                    if m:
+                        grid.append(_line_to_row(m))
     meta = extract_header_meta(full_text_head)
     return explode_multiline_rows(grid), meta
 
 
-FALLBACK_HEADER = ["date", "narration", "amount", "balance"]
+FALLBACK_HEADER = ["date", "narration", "debit", "credit", "balance"]
 
 
 def looks_like_fallback_grid(grid: list[list]) -> bool:
-    """True when the grid came from the regex fallback (uniform 4-col, no header)."""
-    return bool(grid) and all(len(r) == 4 for r in grid[:10])
+    """True when the grid came from the regex fallback (uniform 5-col, no header)."""
+    return bool(grid) and all(len(r) == 5 for r in grid[:10])

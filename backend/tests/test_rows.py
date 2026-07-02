@@ -81,3 +81,30 @@ def test_multiline_cell_explosion():
     assert txns[0].direction == "DEBIT"
     assert txns[1].direction == "CREDIT"
     assert txns[1].amount == Decimal("500.00")
+
+
+def test_repair_directions_from_balance():
+    """Regex fallback guesses directions; balance deltas correct them."""
+    from app.ingest.rows import RawTxn, repair_directions
+
+    def t(i, amount, direction, balance, problems=None):
+        return RawTxn(
+            row_index=i, txn_date=date(2025, 2, i + 1), narration="x",
+            amount=Decimal(amount), direction=direction,
+            balance=Decimal(balance), channel="UNKNOWN", reference_id=None,
+            counterparty_id=None, counterparty_name=None,
+            confidence=0.85, problems=problems or [],
+        )
+
+    txns = [
+        t(0, "1000", "CREDIT", "1000"),                        # seed balance
+        t(1, "500", "DEBIT", "1500", ["direction_assumed"]),   # actually CREDIT
+        t(2, "200", "DEBIT", "1300"),                          # correct
+        t(3, "300", "DEBIT", "1600", ["direction_assumed"]),   # actually CREDIT
+    ]
+    fixed = repair_directions(txns)
+    assert fixed == 2
+    assert txns[1].direction == "CREDIT"
+    assert txns[2].direction == "DEBIT"
+    assert txns[3].direction == "CREDIT"
+    assert "direction_assumed" not in txns[1].problems
