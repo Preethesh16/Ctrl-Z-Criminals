@@ -6,17 +6,24 @@
  * to hit the FastAPI backend proxied at /api (see vite.config.ts).
  */
 import type {
+  AnalysisSummary,
   BankTemplateIn,
   BankTemplateOut,
   CaseCreate,
+  CaseGraph,
   CaseOut,
   CaseStats,
   CleanReport,
   ColumnTemplate,
+  CommonIdentifier,
+  Disposition,
   DocumentColumns,
   DocumentOut,
   JobOut,
   Page,
+  RoundTrip,
+  Trail,
+  TrailStopRule,
   TransactionOut,
   TransactionReview,
   UploadOut,
@@ -84,54 +91,26 @@ const realAdapter = {
   saveTemplate: (template: BankTemplateIn) =>
     request<BankTemplateOut>('/templates', { method: 'POST', body: JSON.stringify(template) }),
 
-  /** No single backend endpoint — composed from documents + transaction queries. */
-  getCaseStats: async (caseId: string): Promise<CaseStats> => {
-    const [docs, all, review] = await Promise.all([
-      realAdapter.listDocuments(caseId),
-      realAdapter.listTransactions(caseId, { limit: 1 }),
-      realAdapter.listTransactions(caseId, { limit: 1, needs_review: true }),
-    ])
-    const accounts = new Set(docs.map((d) => d.account_number).filter(Boolean))
-    return {
-      case_id: caseId,
-      documents_count: docs.length,
-      transactions_count: all.total,
-      needs_review_count: review.total,
-      flagged_count: 0, // per-rule flag counts arrive with the Phase-3 flags API
-      accounts_count: accounts.size,
-      round_trips_count: 0, // Phase 3
-      cleaning: { duplicates_flagged: 0, reversals_detected: 0, balance_breaks: 0 }, // via cleanCase()
-    }
-  },
+  /* Person A reconciled these to real endpoints (2026-07-02, commit c354dc8). */
+  getCaseStats: (caseId: string) => request<CaseStats>(`/cases/${caseId}/stats`),
+  getDocumentColumns: (documentId: string) =>
+    request<DocumentColumns>(`/documents/${documentId}/columns`),
+  saveColumnTemplate: (doc: DocumentColumns, template: ColumnTemplate): Promise<JobOut | null> =>
+    request<JobOut>(`/documents/${doc.document_id}/template`, {
+      method: 'POST',
+      body: JSON.stringify(template),
+    }),
 
-  /** PROVISIONAL, mock-only: no backend source of raw columns yet. */
-  getDocumentColumns: (documentId: string): Promise<DocumentColumns> => {
-    void documentId
-    return Promise.reject(
-      new ApiError(501, 'raw-column preview is not available from the server yet'),
-    )
-  },
-
-  /** Real mode saves a reusable bank template; re-parse of the failed file isn't
-   * server-triggerable yet, so this returns null (the UI asks for a re-upload). */
-  saveColumnTemplate: async (
-    doc: DocumentColumns,
-    template: ColumnTemplate,
-  ): Promise<JobOut | null> => {
-    const headerSignature = doc.columns.map((c) => c.header.trim().toLowerCase()).join('|')
-    const mapping: Record<string, string> = {}
-    for (const [index, field] of Object.entries(template.mapping)) {
-      const header = doc.columns.find((c) => c.index === Number(index))?.header
-      if (header && field !== 'ignore') mapping[header] = field
-    }
-    await realAdapter.saveTemplate({
-      name: template.bank_name,
-      bank: template.bank_name,
-      header_signature: headerSignature,
-      mapping,
-    })
-    return null
-  },
+  /* Phase-3 analysis endpoints */
+  analyzeCase: (caseId: string) =>
+    request<AnalysisSummary>(`/cases/${caseId}/analyze`, { method: 'POST' }),
+  getGraph: (caseId: string) => request<CaseGraph>(`/cases/${caseId}/graph`),
+  getRoundTrips: (caseId: string) => request<RoundTrip[]>(`/cases/${caseId}/round-trips`),
+  getCorrelation: (caseId: string) =>
+    request<CommonIdentifier[]>(`/cases/${caseId}/correlation`),
+  getDisposition: (caseId: string) => request<Disposition>(`/cases/${caseId}/disposition`),
+  getTrail: (caseId: string, txnId: string, stopRule: TrailStopRule = 'tranche') =>
+    request<Trail>(`/cases/${caseId}/trail/${txnId}?stop_rule=${stopRule}`),
 }
 
 export const api = USE_REAL_API ? realAdapter : mockAdapter
