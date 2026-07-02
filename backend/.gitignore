@@ -1,0 +1,5 @@
+.venv/
+uploads/
+tracenet.db
+__pycache__/
+.pytest_cache/

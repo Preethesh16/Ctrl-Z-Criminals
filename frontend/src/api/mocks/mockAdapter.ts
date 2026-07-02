@@ -1,27 +1,29 @@
 /**
- * In-memory mock adapter — standing rule from CLAUDE.md: Person B codes
- * against this until Person A's real API lands, then flips VITE_API_MODE.
+ * In-memory mock adapter, contract-shaped (backend/openapi.json parity):
+ * upload returns JobOut, duplicates throw 409, job progress is 0–100 with
+ * "N transactions" in detail, transactions come back paginated.
  *
- * Simulates upload → job polling → parsed transactions, including the
- * failure states the UI must handle (password-protected PDF, unsupported
- * format, duplicate file). All data is synthetic — never derived from the
- * confidential Bank-statements-dataset.
+ * All data is synthetic — never derived from the confidential dataset.
  */
 import type {
-  Case,
   CaseCreate,
-  Channel,
-  Job,
-  Transaction,
-  UploadResult,
+  CaseOut,
+  Direction,
+  DocumentOut,
+  JobOut,
+  Page,
+  TransactionOut,
 } from '../types'
+import type { TransactionQuery } from '../client'
+import { ApiError } from '../errors'
 
-const SUPPORTED_EXTENSIONS = ['pdf', 'xlsx', 'xls', 'csv', 'tsv', 'docx', 'jpg', 'jpeg', 'png']
+const SUPPORTED_EXTENSIONS = ['pdf', 'xlsx', 'xls', 'csv', 'tsv', 'docx', 'jpg', 'jpeg', 'png', 'txt']
 
-const cases = new Map<string, Case>()
-const jobs = new Map<string, Job>()
-const transactionsByCase = new Map<string, Transaction[]>()
-const uploadedFileKeysByCase = new Map<string, Set<string>>()
+const cases = new Map<string, CaseOut>()
+const documents = new Map<string, DocumentOut>()
+const jobs = new Map<string, JobOut & { _fileKey?: string }>()
+const transactionsByCase = new Map<string, TransactionOut[]>()
+const fileKeysByCase = new Map<string, Set<string>>()
 
 let idCounter = 0
 const nextId = (prefix: string) => `${prefix}_${++idCounter}`
@@ -40,7 +42,7 @@ function seededRandom(seed: string): () => number {
   }
 }
 
-const NARRATIONS: Array<{ template: string; channel: Channel }> = [
+const NARRATIONS: Array<{ template: string; channel: string }> = [
   { template: 'UPI/CR/{ref}/ramesh.kumar@okhdfc/HDFC/payment', channel: 'UPI' },
   { template: 'UPI/DR/{ref}/quickmart.store@ybl/YESB/purchase', channel: 'UPI' },
   { template: 'NEFT-{ref}-SURESH TRADERS-TRANSFER', channel: 'NEFT' },
@@ -52,33 +54,41 @@ const NARRATIONS: Array<{ template: string; channel: Channel }> = [
   { template: 'CASH DEPOSIT BRANCH KORAMANGALA', channel: 'CASH' },
 ]
 
-function generateTransactions(caseId: string, documentId: string, seed: string): Transaction[] {
+function generateTransactions(documentId: string, seed: string): TransactionOut[] {
   const rand = seededRandom(seed)
   const count = 40 + Math.floor(rand() * 160)
-  const rows: Transaction[] = []
-  let balancePaise = 50_00_000_00 + Math.floor(rand() * 100_00_000_00) // ₹50L–₹150L opening
+  const rows: TransactionOut[] = []
+  let balance = 5_00_000 + Math.floor(rand() * 95_00_000) // ₹5L–₹1Cr opening
   const start = new Date('2026-01-05T00:00:00Z').getTime()
   let t = start
   for (let i = 0; i < count; i++) {
     t += Math.floor(rand() * 36 * 3600 * 1000)
     const pick = NARRATIONS[Math.floor(rand() * NARRATIONS.length)]
     const ref = String(100000000000 + Math.floor(rand() * 899999999999))
-    const isCredit = rand() < 0.4
-    const amountPaise = (1 + Math.floor(rand() * 500)) * 1000_00 // ₹1k–₹5L in ₹1k steps
-    balancePaise += isCredit ? amountPaise : -amountPaise
-    const digital = rand() < 0.85
+    const direction: Direction = rand() < 0.4 ? 'CREDIT' : 'DEBIT'
+    const amount = (1 + Math.floor(rand() * 500)) * 1000 // ₹1k–₹5L
+    balance += direction === 'CREDIT' ? amount : -amount
+    const confidence = rand() < 0.85 ? 1.0 : 0.55 + rand() * 0.44
+    const date = new Date(t)
     rows.push({
       id: nextId('txn'),
-      case_id: caseId,
-      source_document_id: documentId,
-      txn_date: new Date(t).toISOString(),
-      narration: pick.template.replace('{ref}', ref),
-      reference_id: pick.channel === 'CASH' ? null : ref,
+      document_id: documentId,
+      account_ref: 'XXXX1234',
+      row_index: i,
+      txn_date: date.toISOString().slice(0, 10),
+      txn_time: date.toISOString().slice(11, 19),
+      amount_inr: `${amount}.00`,
+      direction,
+      balance_after: `${balance}.00`,
       channel: pick.channel,
-      debit_paise: isCredit ? null : amountPaise,
-      credit_paise: isCredit ? amountPaise : null,
-      balance_paise: balancePaise,
-      extraction_confidence: digital ? 1.0 : 0.55 + rand() * 0.44,
+      narration_raw: pick.template.replace('{ref}', ref),
+      reference_id: pick.channel === 'CASH' ? null : ref,
+      counterparty_id: pick.channel === 'UPI' ? pick.template.split('/')[3] : null,
+      counterparty_name: null,
+      flags: [],
+      extraction_confidence: confidence,
+      needs_review: confidence < 0.7,
+      excluded: false,
     })
   }
   return rows
@@ -86,138 +96,147 @@ function generateTransactions(caseId: string, documentId: string, seed: string):
 
 function seedDemoCase(): void {
   const id = nextId('case')
-  const demo: Case = {
+  cases.set(id, {
     id,
     fir_number: 'CEN/0042/2026',
     complainant: 'Demo Complainant (synthetic)',
-    fraud_amount_paise: 5_00_000_00,
-    incident_date: '2026-06-12',
-    status: 'review',
+    fraud_amount: '500000.00',
+    complaint_date: '2026-06-12',
     created_at: '2026-06-28T09:30:00Z',
-    documents_count: 2,
-    transactions_count: 0,
-    flagged_count: 0,
-  }
+  })
   const docId = nextId('doc')
-  const txns = generateTransactions(id, docId, 'demo-seed')
-  transactionsByCase.set(id, txns)
-  demo.transactions_count = txns.length
-  cases.set(id, demo)
+  transactionsByCase.set(id, generateTransactions(docId, 'demo-seed'))
 }
 seedDemoCase()
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export const mockAdapter = {
-  async listCases(): Promise<Case[]> {
+  async listCases(): Promise<CaseOut[]> {
     await delay(200)
     return [...cases.values()].sort((a, b) => b.created_at.localeCompare(a.created_at))
   },
 
-  async createCase(input: CaseCreate): Promise<Case> {
+  async createCase(input: CaseCreate): Promise<CaseOut> {
     await delay(250)
-    const created: Case = {
+    const created: CaseOut = {
       id: nextId('case'),
-      ...input,
-      status: 'draft',
+      fir_number: input.fir_number,
+      complainant: input.complainant ?? null,
+      fraud_amount: input.fraud_amount ?? null,
+      complaint_date: input.complaint_date ?? null,
       created_at: new Date().toISOString(),
-      documents_count: 0,
-      transactions_count: 0,
-      flagged_count: 0,
     }
     cases.set(created.id, created)
     return created
   },
 
-  async getCase(caseId: string): Promise<Case> {
+  async getCase(caseId: string): Promise<CaseOut> {
     await delay(150)
     const found = cases.get(caseId)
-    if (!found) throw new Error(`Case ${caseId} not found`)
+    if (!found) throw new ApiError(404, 'case not found')
     return found
   },
 
-  async uploadDocument(caseId: string, file: File): Promise<UploadResult> {
+  async uploadDocument(caseId: string, file: File): Promise<JobOut> {
     await delay(300 + Math.random() * 400)
-    const documentId = nextId('doc')
-    const jobId = nextId('job')
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-    const fileKey = `${file.name}:${file.size}`
-    const seenKeys = uploadedFileKeysByCase.get(caseId) ?? new Set<string>()
+    if (!cases.has(caseId)) throw new ApiError(404, 'case not found')
 
-    const job: Job = {
-      id: jobId,
-      document_id: documentId,
-      status: 'queued',
+    const fileKey = `${file.name}:${file.size}`
+    const seen = fileKeysByCase.get(caseId) ?? new Set<string>()
+    if (seen.has(fileKey)) {
+      throw new ApiError(409, `identical file already uploaded: ${file.name}`)
+    }
+
+    const documentId = nextId('doc')
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    const job: JobOut & { _fileKey?: string } = {
+      id: nextId('job'),
+      case_id: caseId,
+      kind: 'parse',
+      status: 'pending',
       progress: 0,
-      transactions_found: null,
-      error_code: null,
-      error_message: null,
+      detail: null,
+      _fileKey: fileKey,
     }
 
     if (!SUPPORTED_EXTENSIONS.includes(ext)) {
       job.status = 'failed'
-      job.error_code = 'UNSUPPORTED_FORMAT'
-      job.error_message = `.${ext} files are not supported`
-    } else if (seenKeys.has(fileKey)) {
-      job.status = 'failed'
-      job.error_code = 'DUPLICATE_FILE'
-      job.error_message = 'Identical file already uploaded to this case (same SHA-256)'
+      job.detail = `unsupported file type: .${ext}`
     } else if (/protected|locked|password/i.test(file.name)) {
       // Mock trigger for the password-protected flow: name the file accordingly.
       job.status = 'failed'
-      job.error_code = 'PASSWORD_PROTECTED'
-      job.error_message = 'PDF is password-protected'
+      job.detail = 'PDF is password-protected'
     } else {
-      seenKeys.add(fileKey)
-      uploadedFileKeysByCase.set(caseId, seenKeys)
-      // Progress advances on each poll; completion generates transactions.
-      ;(job as Job & { _caseId?: string; _seed?: string })._caseId = caseId
-      ;(job as Job & { _seed?: string })._seed = fileKey
+      seen.add(fileKey)
+      fileKeysByCase.set(caseId, seen)
+      documents.set(documentId, {
+        id: documentId,
+        case_id: caseId,
+        filename: file.name,
+        sha256: seededRandom(fileKey)().toString(16).slice(2).padEnd(16, '0').repeat(4).slice(0, 64),
+        file_kind: ext === 'pdf' ? 'pdf_digital' : ext,
+        status: 'parsing',
+        error: null,
+        account_number: 'XXXX1234',
+        account_holder: null,
+        bank_name: null,
+        period_from: null,
+        period_to: null,
+        txn_count: 0,
+      })
+      ;(job as JobOut & { _docId?: string })._docId = documentId
     }
 
-    jobs.set(jobId, job)
-    return {
-      document_id: documentId,
-      job_id: jobId,
-      filename: file.name,
-      sha256: seededRandom(fileKey)().toString(16).slice(2).padEnd(16, '0').repeat(4).slice(0, 64),
-    }
+    jobs.set(job.id, job)
+    return { ...job }
   },
 
-  async getJob(jobId: string): Promise<Job> {
+  async getJob(jobId: string): Promise<JobOut> {
     await delay(120)
     const job = jobs.get(jobId)
-    if (!job) throw new Error(`Job ${jobId} not found`)
-    if (job.status === 'queued') {
+    if (!job) throw new ApiError(404, 'job not found')
+    if (job.status === 'pending') {
       job.status = 'running'
-      job.progress = 0.1
+      job.progress = 10
     } else if (job.status === 'running') {
-      job.progress = Math.min(1, job.progress + 0.15 + Math.random() * 0.2)
-      if (job.progress >= 1) {
-        const meta = job as Job & { _caseId?: string; _seed?: string }
-        const caseId = meta._caseId
-        if (caseId) {
-          const documentTxns = generateTransactions(caseId, job.document_id, meta._seed ?? job.id)
-          const existing = transactionsByCase.get(caseId) ?? []
-          transactionsByCase.set(caseId, [...existing, ...documentTxns])
-          const parent = cases.get(caseId)
-          if (parent) {
-            parent.documents_count += 1
-            parent.transactions_count += documentTxns.length
-            parent.status = 'ingesting'
-          }
-          job.transactions_found = documentTxns.length
+      job.progress = Math.min(100, job.progress + 15 + Math.floor(Math.random() * 20))
+      if (job.progress >= 100) {
+        const meta = job as JobOut & { _fileKey?: string; _docId?: string }
+        const docId = meta._docId ?? nextId('doc')
+        const txns = generateTransactions(docId, meta._fileKey ?? job.id)
+        const existing = transactionsByCase.get(job.case_id) ?? []
+        transactionsByCase.set(job.case_id, [...existing, ...txns])
+        const doc = documents.get(docId)
+        if (doc) {
+          doc.status = 'parsed'
+          doc.txn_count = txns.length
         }
         job.status = 'done'
+        job.detail = `${txns.length} transactions`
       }
     }
     return { ...job }
   },
 
-  async listTransactions(caseId: string): Promise<Transaction[]> {
+  async listDocuments(caseId: string): Promise<DocumentOut[]> {
+    await delay(150)
+    return [...documents.values()].filter((d) => d.case_id === caseId)
+  },
+
+  async listTransactions(
+    caseId: string,
+    query: TransactionQuery = {},
+  ): Promise<Page<TransactionOut>> {
     await delay(250)
-    return [...(transactionsByCase.get(caseId) ?? [])].sort((a, b) =>
+    const offset = query.offset ?? 0
+    const limit = query.limit ?? 100
+    let all = [...(transactionsByCase.get(caseId) ?? [])].sort((a, b) =>
       a.txn_date.localeCompare(b.txn_date),
     )
+    if (query.needs_review !== undefined) {
+      all = all.filter((t) => t.needs_review === query.needs_review)
+    }
+    return { items: all.slice(offset, offset + limit), total: all.length, offset, limit }
   },
 }
