@@ -5,7 +5,7 @@ import { CaseWizardPage } from './pages/CaseWizardPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { FlowGraphPage } from './pages/FlowGraphPage'
 import { MoneyTrailPage } from './pages/MoneyTrailPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
+import { ReportPage } from './pages/ReportPage'
 
 function App() {
   return (
@@ -18,15 +18,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/flow-graph" element={<FlowGraphPage />} />
           <Route path="/money-trail" element={<MoneyTrailPage />} />
-          <Route
-            path="/reports"
-            element={
-              <PlaceholderPage
-                title="Reports"
-                description="Court-ready investigation report, standardized extraction PDF, and Excel export arrive in Phase 4."
-              />
-            }
-          />
+          <Route path="/reports" element={<ReportPage />} />
           <Route path="*" element={<Navigate to="/cases" replace />} />
         </Route>
       </Routes>

@@ -1,0 +1,41 @@
+# TraceNet — one-command on-prem bring-up (no internet needed at runtime):
+#   docker compose up --build
+# UI on http://localhost:3000, API proxied at /api.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tracenet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracenet}
+      POSTGRES_DB: tracenet
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracenet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://tracenet:${POSTGRES_PASSWORD:-tracenet}@db:5432/tracenet
+      UPLOAD_DIR: /data/uploads
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      LLM_ENABLED: "false"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:
