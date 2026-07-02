@@ -38,6 +38,19 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    """Never leak stack traces to the client; keep the envelope consistent."""
+    import logging
+
+    from fastapi.responses import JSONResponse
+
+    logging.getLogger("tracenet").exception("unhandled error on %s %s",
+                                            request.method, request.url.path)
+    return JSONResponse(status_code=500,
+                        content={"detail": "internal error — see server logs"})
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -88,12 +101,17 @@ async def upload_document(
         raise HTTPException(404, "case not found")
 
     content = await file.read()
+    if not content:
+        raise HTTPException(422, "empty file")
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(413, f"file exceeds {settings.max_upload_mb} MB")
 
     upload_dir = Path(settings.upload_dir) / case_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    stored = upload_dir / (file.filename or "statement.bin")
+    # sanitize: basename only — a crafted filename like ../../etc/x must not
+    # escape the case directory
+    safe_name = Path(file.filename or "statement.bin").name.replace("\x00", "") or "statement.bin"
+    stored = upload_dir / safe_name
     stored.write_bytes(content)
 
     digest = sha256_file(stored)
@@ -103,7 +121,7 @@ async def upload_document(
 
     doc = Document(
         case_id=case_id,
-        filename=file.filename or "statement.bin",
+        filename=safe_name,
         sha256=digest,
         file_kind=detect_file_kind(stored, content[:4096]),
     )
@@ -265,6 +283,54 @@ def _run_process_with_mapping(document_id: str, stored_path: str, job_id: str, m
         process_document(db, document_id, stored_path, job_id, mapping_override=mapping)
     finally:
         db.close()
+
+
+@app.get("/documents/{document_id}/suggest-mapping")
+def suggest_mapping(document_id: str, db: Session = Depends(get_db)) -> dict:
+    """LLM assist (optional): pre-fill the column-mapping UI. 501 when disabled."""
+    from .ingest.columns import score_header_row
+    from .ingest.router import read_any_grid
+    from .llm.assist import LlmDisabled, suggest_column_mapping
+    from .llm.masking import masked_samples
+
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    grid, _ = read_any_grid(_stored_path(doc))
+    header_idx = max(range(min(45, len(grid))), key=lambda i: score_header_row(grid[i]))
+    masked = masked_samples(grid, header_idx)
+    try:
+        mapping = suggest_column_mapping(masked)
+    except LlmDisabled as e:
+        raise HTTPException(501, str(e)) from None
+    db.add(AuditLog(case_id=doc.case_id, action="llm_mapping_suggested",
+                    detail={"document": doc.filename, "columns_sent": masked[0],
+                            "mapping": mapping}))
+    db.commit()
+    return {"document_id": document_id, "mapping": mapping,
+            "note": "suggestion only — officer must confirm in the mapping UI"}
+
+
+@app.get("/cases/{case_id}/report/narrative")
+def report_narrative_endpoint(case_id: str, db: Session = Depends(get_db)) -> dict:
+    """LLM assist (optional): plain-language narrative from aggregate numbers."""
+    from .llm.assist import LlmDisabled, report_narrative
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    if not get_settings().llm_enabled:
+        raise HTTPException(501, "LLM assist is disabled (set LLM_ENABLED=true)")
+    summary = _artifact(db, case_id, "summary")
+    loops = _artifact(db, case_id, "round_trips")
+    dispo = _artifact(db, case_id, "disposition")
+    try:
+        text = report_narrative(summary, loops, dispo)
+    except LlmDisabled as e:
+        raise HTTPException(501, str(e)) from None
+    db.add(AuditLog(case_id=case_id, action="llm_narrative_generated",
+                    detail={"chars": len(text)}))
+    db.commit()
+    return {"narrative": text}
 
 
 @app.get("/templates", response_model=list[BankTemplateOut])

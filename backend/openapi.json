@@ -430,6 +430,90 @@
     }
    }
   },
+  "/documents/{document_id}/suggest-mapping": {
+   "get": {
+    "summary": "Suggest Mapping",
+    "description": "LLM assist (optional): pre-fill the column-mapping UI. 501 when disabled.",
+    "operationId": "suggest_mapping_documents__document_id__suggest_mapping_get",
+    "parameters": [
+     {
+      "name": "document_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Document Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Suggest Mapping Documents  Document Id  Suggest Mapping Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/cases/{case_id}/report/narrative": {
+   "get": {
+    "summary": "Report Narrative Endpoint",
+    "description": "LLM assist (optional): plain-language narrative from aggregate numbers.",
+    "operationId": "report_narrative_endpoint_cases__case_id__report_narrative_get",
+    "parameters": [
+     {
+      "name": "case_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Case Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Report Narrative Endpoint Cases  Case Id  Report Narrative Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/templates": {
    "get": {
     "summary": "List Templates",

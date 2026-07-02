@@ -1,8 +1,0 @@
-SBI BANK
-Account No : 35005196090696
-Name : Mule5 Deepak
-
-Trans Dt      Transaction Particulars                                            Debit        Credit         Balance
-05-05-2026    UPI/CR/318645697614/MULE4 FARID/HDFC/farid4@okhdfc/repay                      58000.00        62309.00
-05-05-2026    UPI/DR/947734632876/MULE1 RAMESH/SBI/ramesh1@oksbi/gift         56500.00                       5809.00
-07-05-2026    POS 644482656657 DMART                                           1528.00                       4281.00
