@@ -9,27 +9,28 @@
 ## Phase 1 — Foundation
 
 ### Person A
-- [ ] Repo scaffold: backend project, requirements.txt, config, SQLAlchemy setup (Postgres + SQLite fallback)
-- [ ] DB models: Case, Document, Transaction, Account, Flag, Job, AuditLog
-- [ ] Canonical transaction schema (Pydantic) per plan.md §4.1 proposal schema
-- [ ] Digital PDF parser (pdfplumber) with header-block extraction
-- [ ] Excel (XLSX/XLS) parser with header-row auto-detection
-- [ ] CSV/TSV parser with dialect sniffing
-- [ ] Normalization: dates (all Indian formats), amounts (1,00,000 / Dr-Cr / signed column), channel classifier, reference-ID extraction (RRN/UTR per-channel regex)
-- [ ] SHA-256 on upload + Evidence Locker records
-- [ ] API: cases, upload, job status, transactions list — **publish OpenAPI contract for Person B**
+- [x] Repo scaffold: backend project, requirements.txt, config, SQLAlchemy setup (Postgres + SQLite fallback) (done: 2026-07-02, A)
+- [x] DB models: Case, Document, Transaction, Account, Flag, Job, AuditLog (done: 2026-07-02, A)
+- [x] Canonical transaction schema (Pydantic) per plan.md §4.1 proposal schema (done: 2026-07-02, A)
+- [x] Digital PDF parser (pdfplumber) with header-block extraction (done: 2026-07-02, A)
+- [x] Excel (XLSX/XLS) parser with header-row auto-detection (done: 2026-07-02, A)
+- [x] CSV/TSV parser with dialect sniffing (done: 2026-07-02, A)
+- [x] Normalization: dates (all Indian formats), amounts (1,00,000 / Dr-Cr / signed column), channel classifier, reference-ID extraction (RRN/UTR per-channel regex) (done: 2026-07-02, A)
+- [x] SHA-256 on upload + Evidence Locker records (done: 2026-07-02, A)
+- [x] API: cases, upload, job status, transactions list — **publish OpenAPI contract for Person B** (done: 2026-07-02, A)
 
 ### Person B
 - [x] Frontend scaffold: Vite + React 18 + TS + Tailwind v4 + framer-motion + design-token theme & motion presets (done: 2026-07-02, setup)
 - [x] Typed API client generated from OpenAPI contract + mock fixtures fallback (done: 2026-07-01, B)
-  > note: types are hand-written from plan.md §4.1 (`frontend/src/api/types.ts`) since the OpenAPI contract isn't published yet; regenerate + reconcile when Person A ships it. Mock adapter is default; `VITE_API_MODE=real` flips to the FastAPI proxy.
+  > 2026-07-02: types + client + mock adapter reconciled against the published `backend/openapi.json` (decimal-string money, JobOut with 0–100 progress + "N transactions" detail, paginated transactions, duplicate upload = HTTP 409). Mock adapter now mirrors contract shapes exactly.
 - [x] Cases list page + New Case form (FIR no., complainant, fraud amount) (done: 2026-07-01, B)
 - [x] Case wizard shell (Upload → Review → Analyze steps) (done: 2026-07-01, B)
 - [x] Upload dropzone: multi-file, per-file progress via job polling, "N transactions found" result (done: 2026-07-01, B)
   > note: verified against mocks incl. failure states (password-protected, duplicate hash, unsupported format); real-API pass pending Person A's Phase-1 endpoints.
 
 ### ✅ Checkpoint 1 (merge to main)
-- [ ] Upload a digital PDF through the UI → parsed transactions appear from the real API
+- [x] Upload a digital PDF through the UI → parsed transactions appear from the real API (done: 2026-07-02, B)
+  > verified end-to-end on B's machine through the UI's exact network path: frontend :3000 → `/api` proxy (fixed: proxy now strips the `/api` prefix, backend routes are unprefixed) → FastAPI :8000 → digital PDF parsed → 47 transactions returned in contract shape. Backend's 20 tests pass on B's machine too. Remaining: joint browser walkthrough at merge time.
 
 ---
 

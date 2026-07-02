@@ -1,81 +1,84 @@
 /**
- * API types — PROVISIONAL, hand-written from plan.md §4.1 canonical schema.
- * Replace with types generated from Person A's OpenAPI contract when it lands
- * (end of Phase 1). Any change here must be noted in progress.md.
+ * API types — reconciled 2026-07-02 against Person A's published contract
+ * (backend/openapi.json). Keep in lockstep with it; contract changes require
+ * a progress.md note per CLAUDE.md.
  *
- * Money is integer paise (never float). Timestamps are UTC ISO strings.
+ * Money is a decimal string in INR (never float). Dates are ISO strings.
  */
-
-export type CaseStatus = 'draft' | 'ingesting' | 'review' | 'analyzed'
-
-export interface Case {
-  id: string
-  fir_number: string
-  complainant: string
-  fraud_amount_paise: number
-  incident_date: string
-  status: CaseStatus
-  created_at: string
-  documents_count: number
-  transactions_count: number
-  flagged_count: number
-}
 
 export interface CaseCreate {
   fir_number: string
-  complainant: string
-  fraud_amount_paise: number
-  incident_date: string
+  complainant?: string | null
+  /** Decimal string in rupees, e.g. "500000.00" */
+  fraud_amount?: string | null
+  complaint_date?: string | null
 }
 
-export type JobStatus = 'queued' | 'running' | 'done' | 'failed'
-
-export type JobErrorCode =
-  | 'PASSWORD_PROTECTED'
-  | 'UNSUPPORTED_FORMAT'
-  | 'DUPLICATE_FILE'
-  | 'PARSE_FAILED'
-
-export interface Job {
+export interface CaseOut {
   id: string
-  document_id: string
-  status: JobStatus
-  /** 0..1 */
-  progress: number
-  transactions_found: number | null
-  error_code: JobErrorCode | null
-  error_message: string | null
+  fir_number: string
+  complainant: string | null
+  fraud_amount: string | null
+  complaint_date: string | null
+  created_at: string
 }
 
-export interface UploadResult {
-  document_id: string
-  job_id: string
-  filename: string
-  sha256: string
-}
+export type JobStatus = 'pending' | 'running' | 'done' | 'failed'
 
-export type Channel =
-  | 'UPI'
-  | 'NEFT'
-  | 'IMPS'
-  | 'RTGS'
-  | 'ATM'
-  | 'CHEQUE'
-  | 'CASH'
-  | 'POS'
-  | 'OTHER'
-
-export interface Transaction {
+export interface JobOut {
   id: string
   case_id: string
-  source_document_id: string
+  kind: string
+  status: JobStatus
+  /** 0–100 */
+  progress: number
+  /** On done: "N transactions". On failed: error description. */
+  detail: string | null
+}
+
+export interface DocumentOut {
+  id: string
+  case_id: string
+  filename: string
+  sha256: string
+  file_kind: string
+  status: string
+  error: string | null
+  account_number: string | null
+  account_holder: string | null
+  bank_name: string | null
+  period_from: string | null
+  period_to: string | null
+  txn_count: number
+}
+
+export type Direction = 'DEBIT' | 'CREDIT'
+
+export interface TransactionOut {
+  id: string
+  document_id: string
+  account_ref: string
+  row_index: number
   txn_date: string
-  narration: string
+  txn_time: string | null
+  /** Decimal string in rupees */
+  amount_inr: string
+  direction: Direction
+  balance_after: string | null
+  channel: string
+  narration_raw: string
   reference_id: string | null
-  channel: Channel
-  debit_paise: number | null
-  credit_paise: number | null
-  balance_paise: number | null
-  /** 1.0 for digital extraction; OCR confidence otherwise. <0.70 → review queue. */
+  counterparty_id: string | null
+  counterparty_name: string | null
+  flags: string[]
   extraction_confidence: number
+  needs_review: boolean
+  excluded: boolean
+}
+
+export interface Page<T> {
+  items: T[]
+  total: number
+  offset: number
+  limit: number
 }

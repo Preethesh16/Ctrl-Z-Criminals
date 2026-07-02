@@ -1,4 +1,4 @@
-/** Display helpers. Money arrives as integer paise; display uses Indian grouping, IST dates. */
+/** Display helpers. Money arrives as decimal strings in INR; dates display IST. */
 
 const inrFormatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -6,8 +6,11 @@ const inrFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0,
 })
 
-export function formatINR(paise: number): string {
-  return inrFormatter.format(paise / 100)
+/** "500000.00" → "₹5,00,000". Display only — never do arithmetic on the parsed value. */
+export function formatINR(amount: string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') return ''
+  const value = Number(amount)
+  return Number.isFinite(value) ? inrFormatter.format(value) : amount
 }
 
 const istDate = new Intl.DateTimeFormat('en-IN', {
@@ -17,8 +20,8 @@ const istDate = new Intl.DateTimeFormat('en-IN', {
   year: 'numeric',
 })
 
-export function formatDateIST(isoUtc: string): string {
-  return istDate.format(new Date(isoUtc))
+export function formatDateIST(iso: string): string {
+  return istDate.format(new Date(iso))
 }
 
 export function formatBytes(bytes: number): string {
