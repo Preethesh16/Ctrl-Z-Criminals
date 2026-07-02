@@ -410,6 +410,69 @@ def money_trail(case_id: str, txn_id: str, stop_rule: str = "tranche",
     return out
 
 
+@app.get("/cases/{case_id}/report/preview")
+def report_preview(case_id: str, db: Session = Depends(get_db)):
+    """Investigation report as HTML — same template as the PDF (live preview)."""
+    from fastapi.responses import HTMLResponse
+
+    from .reporting.builder import render_report_html
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    return HTMLResponse(render_report_html(db, case_id))
+
+
+@app.get("/cases/{case_id}/export/report.pdf")
+def export_report_pdf(case_id: str, db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+
+    from .reporting.builder import html_to_pdf, render_report_html
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    pdf = html_to_pdf(render_report_html(db, case_id))
+    db.add(AuditLog(case_id=case_id, actor="officer", action="export_report_pdf",
+                    detail={"bytes": len(pdf)}))
+    db.commit()
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="tracenet-report-{case_id[:8]}.pdf"'})
+
+
+@app.get("/cases/{case_id}/export/standardized.pdf")
+def export_standardized_pdf(case_id: str, db: Session = Depends(get_db)):
+    """Mentor requirement 3: every source format re-rendered as ONE uniform table."""
+    from fastapi.responses import Response
+
+    from .reporting.builder import html_to_pdf, render_standardized_html
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    pdf = html_to_pdf(render_standardized_html(db, case_id))
+    db.add(AuditLog(case_id=case_id, actor="officer", action="export_standardized_pdf",
+                    detail={"bytes": len(pdf)}))
+    db.commit()
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="tracenet-standardized-{case_id[:8]}.pdf"'})
+
+
+@app.get("/cases/{case_id}/export/case.xlsx")
+def export_excel(case_id: str, db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+
+    from .reporting.builder import build_excel
+
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    data = build_excel(db, case_id)
+    db.add(AuditLog(case_id=case_id, actor="officer", action="export_excel",
+                    detail={"bytes": len(data)}))
+    db.commit()
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="tracenet-case-{case_id[:8]}.xlsx"'})
+
+
 @app.get("/cases/{case_id}/transactions", response_model=Page[TransactionOut])
 def list_transactions(
     case_id: str,
