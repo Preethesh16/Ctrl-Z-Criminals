@@ -58,15 +58,54 @@ def _extract_via_ocr(path: Path, info: dict, scanned_pdf: bool) -> tuple[list["R
     return txns, info
 
 
-def extract_rows(path: str | Path) -> tuple[list[RawTxn], dict]:
+def read_any_grid(path: str | Path) -> tuple[list[list], dict]:
+    """Raw cell grid for any tabular-capable format (mapping UI backend)."""
+    path = Path(path)
+    kind = detect_file_kind(path)
+    info: dict = {"file_kind": kind}
+    if kind == "pdf" and pdf_has_text(path):
+        grid, meta = read_pdf_grid(path)
+        info["header_meta"] = meta
+        if looks_like_fallback_grid(grid):
+            grid = [FALLBACK_HEADER, *grid]
+    elif kind in ("xlsx", "xls"):
+        grid = read_excel_grid(path, kind)
+    elif kind == "csv":
+        grid = read_csv_grid(path)
+    elif kind == "html_table":
+        grid = read_html_table_grid(path)
+    elif kind == "docx":
+        from .docxfile import read_docx_grid
+
+        grid, _ = read_docx_grid(path)
+    elif kind == "txt":
+        import re
+
+        lines = path.read_text(errors="replace").splitlines()
+        grid = [re.split(r"\s{2,}", ln.strip()) for ln in lines if ln.strip()]
+    else:
+        raise UnsupportedFormat(f"no raw grid for file kind: {kind}")
+    return grid, info
+
+
+def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = None) -> tuple[list[RawTxn], dict]:
     """Extract transactions from any supported statement file.
 
+    `mapping_override` applies an officer-saved column template.
     Returns (txns, info). info includes file_kind, header meta (PDF), and
     grid_to_txns diagnostics — everything the audit trail needs.
     """
     path = Path(path)
     kind = detect_file_kind(path)
     info: dict = {"file_kind": kind}
+
+    if mapping_override is not None:
+        grid, ginfo0 = read_any_grid(path)
+        info.update(ginfo0)
+        info["extraction_mode"] = "template_override"
+        txns, ginfo = grid_to_txns(grid, mapping_override=mapping_override)
+        info.update(ginfo)
+        return txns, info
 
     if kind == "pdf":
         if not pdf_has_text(path):
