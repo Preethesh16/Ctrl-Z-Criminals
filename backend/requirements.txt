@@ -22,3 +22,4 @@ weasyprint>=62
 jinja2>=3.1
 anthropic>=0.40
 psycopg2-binary>=2.9
+psycopg[binary]>=3.2
