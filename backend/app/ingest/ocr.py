@@ -52,6 +52,16 @@ def ocr_image(image_bgr: np.ndarray) -> list[OcrLine]:
         _PADDLE = _paddle_engine()
         _PADDLE_TRIED = True
 
+    # Cap resolution — Tesseract accuracy collapses on oversized pages
+    # (phone photos, DPI-less scans). ~3500px height ≈ 300 DPI A4.
+    h, w = image_bgr.shape[:2]
+    if max(h, w) > 3600:
+        import cv2
+
+        scale = 3600 / max(h, w)
+        image_bgr = cv2.resize(image_bgr, (int(w * scale), int(h * scale)),
+                               interpolation=cv2.INTER_AREA)
+
     processed = preprocess(image_bgr)
 
     if _PADDLE is not None:

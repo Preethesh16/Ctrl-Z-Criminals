@@ -37,8 +37,8 @@
 ## Phase 2 — Full Ingestion & Cleaning
 
 ### Person A
-- [x] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/threshold) + pluggable PaddleOCR/Tesseract engines, per-line confidence → row confidence (done: 2026-07-02, A)
-  > blocked (validation only): system `tesseract` not yet installed on A's machine (`sudo pacman -S tesseract tesseract-data-eng`); scanned-PDF golden test auto-skips until then
+- [x] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/**table-rule removal**) + pluggable PaddleOCR/Tesseract engines, per-line confidence → row confidence (done: 2026-07-02, A)
+  > validated: scanned-PDF golden test green end-to-end (rasterize → preprocess → Tesseract → line parse → direction repair)
 - [x] DOCX parser (python-docx tables) and image/photo parser (done: 2026-07-02, A)
 - [ ] docling fallback for digital PDFs when balance reconciliation fails
 - [x] Per-row extraction_confidence; review-queue API (confirm/correct/exclude) (done: 2026-07-02, A)
