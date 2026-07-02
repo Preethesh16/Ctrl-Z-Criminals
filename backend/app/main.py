@@ -9,7 +9,7 @@ from .config import get_settings
 from .db import Base, SessionLocal, engine, get_db
 from .ingest.detector import detect_file_kind
 from .models import AuditLog, Case, Document, Job, Transaction
-from .schemas import CaseCreate, CaseOut, DocumentOut, JobOut, Page, TransactionOut
+from .schemas import CaseCreate, CaseOut, DocumentOut, JobOut, Page, TransactionOut, UploadOut
 from .services.extraction import process_document, sha256_file
 
 Base.metadata.create_all(engine)
@@ -59,7 +59,8 @@ def _run_process(document_id: str, stored_path: str, job_id: str) -> None:
         db.close()
 
 
-@app.post("/cases/{case_id}/documents", response_model=JobOut)
+@app.post("/cases/{case_id}/documents", response_model=UploadOut)
+@app.post("/cases/{case_id}/uploads", response_model=UploadOut)  # alias used by frontend client
 async def upload_document(
     case_id: str,
     file: UploadFile,
@@ -91,8 +92,10 @@ async def upload_document(
         sha256=digest,
         file_kind=detect_file_kind(stored, content[:4096]),
     )
-    job = Job(case_id=case_id, kind="parse")
-    db.add_all([doc, job])
+    db.add(doc)
+    db.flush()
+    job = Job(case_id=case_id, kind="parse", document_id=doc.id)
+    db.add(job)
     db.add(AuditLog(case_id=case_id, action="document_uploaded",
                     detail={"filename": doc.filename, "sha256": digest}))
     db.commit()
@@ -100,7 +103,7 @@ async def upload_document(
     db.refresh(job)
 
     background.add_task(_run_process, doc.id, str(stored), job.id)
-    return job
+    return UploadOut(document_id=doc.id, job_id=job.id, filename=doc.filename, sha256=doc.sha256)
 
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
@@ -122,6 +125,16 @@ def list_documents(case_id: str, db: Session = Depends(get_db)):
         ) or 0
         out.append(item)
     return out
+
+
+@app.post("/cases/{case_id}/clean")
+def clean_case(case_id: str, db: Session = Depends(get_db)) -> dict:
+    """Run the cleaning pass: balance validation, duplicates, reversals."""
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    from .services.cleaning import run_cleaning
+
+    return run_cleaning(db, case_id)
 
 
 @app.get("/cases/{case_id}/transactions", response_model=Page[TransactionOut])

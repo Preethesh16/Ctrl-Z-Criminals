@@ -122,6 +122,55 @@
     }
    }
   },
+  "/cases/{case_id}/uploads": {
+   "post": {
+    "summary": "Upload Document",
+    "operationId": "upload_document_cases__case_id__uploads_post",
+    "parameters": [
+     {
+      "name": "case_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Case Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_document_cases__case_id__uploads_post"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UploadOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/cases/{case_id}/documents": {
    "post": {
     "summary": "Upload Document",
@@ -153,7 +202,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/JobOut"
+         "$ref": "#/components/schemas/UploadOut"
         }
        }
       }
@@ -234,6 +283,48 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/JobOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/cases/{case_id}/clean": {
+   "post": {
+    "summary": "Clean Case",
+    "description": "Run the cleaning pass: balance validation, duplicates, reversals.",
+    "operationId": "clean_case_cases__case_id__clean_post",
+    "parameters": [
+     {
+      "name": "case_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Case Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Clean Case Cases  Case Id  Clean Post"
         }
        }
       }
@@ -342,6 +433,20 @@
      "file"
     ],
     "title": "Body_upload_document_cases__case_id__documents_post"
+   },
+   "Body_upload_document_cases__case_id__uploads_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_upload_document_cases__case_id__uploads_post"
    },
    "CaseCreate": {
     "properties": {
@@ -597,6 +702,17 @@
       "type": "string",
       "title": "Kind"
      },
+     "document_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Document Id"
+     },
      "status": {
       "type": "string",
       "title": "Status"
@@ -615,6 +731,28 @@
        }
       ],
       "title": "Detail"
+     },
+     "error_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error Code"
+     },
+     "transactions_found": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Transactions Found"
      }
     },
     "type": "object",
@@ -622,9 +760,12 @@
      "id",
      "case_id",
      "kind",
+     "document_id",
      "status",
      "progress",
-     "detail"
+     "detail",
+     "error_code",
+     "transactions_found"
     ],
     "title": "JobOut"
    },
@@ -794,6 +935,35 @@
      "excluded"
     ],
     "title": "TransactionOut"
+   },
+   "UploadOut": {
+    "properties": {
+     "document_id": {
+      "type": "string",
+      "title": "Document Id"
+     },
+     "job_id": {
+      "type": "string",
+      "title": "Job Id"
+     },
+     "filename": {
+      "type": "string",
+      "title": "Filename"
+     },
+     "sha256": {
+      "type": "string",
+      "title": "Sha256"
+     }
+    },
+    "type": "object",
+    "required": [
+     "document_id",
+     "job_id",
+     "filename",
+     "sha256"
+    ],
+    "title": "UploadOut",
+    "description": "Response to a document upload: everything needed to poll and display."
    },
    "ValidationError": {
     "properties": {

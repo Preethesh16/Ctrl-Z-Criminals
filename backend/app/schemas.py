@@ -54,9 +54,21 @@ class JobOut(BaseModel):
     id: str
     case_id: str
     kind: str
+    document_id: str | None
     status: str
-    progress: int
+    progress: int  # 0-100
     detail: str | None
+    error_code: str | None
+    transactions_found: int | None
+
+
+class UploadOut(BaseModel):
+    """Response to a document upload: everything needed to poll and display."""
+
+    document_id: str
+    job_id: str
+    filename: str
+    sha256: str
 
 
 class TransactionOut(BaseModel):

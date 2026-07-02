@@ -91,9 +91,12 @@ class Job(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
     kind: Mapped[str] = mapped_column(String(30))  # parse/analyze/report
+    document_id: Mapped[str | None] = mapped_column(String(36), index=True)
     status: Mapped[str] = mapped_column(String(15), default="pending")  # pending/running/done/failed
     progress: Mapped[int] = mapped_column(default=0)  # 0-100
     detail: Mapped[str | None] = mapped_column(Text)
+    error_code: Mapped[str | None] = mapped_column(String(30))  # PASSWORD_PROTECTED/UNSUPPORTED_FORMAT/PARSE_FAILED
+    transactions_found: Mapped[int | None] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
