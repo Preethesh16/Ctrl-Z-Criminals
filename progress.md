@@ -49,10 +49,14 @@
 - [ ] Saved-template API for the column-mapping UI
 
 ### Person B
-- [ ] Review queue UI: low-confidence rows + suspected duplicates, big accept/fix/exclude buttons
-- [ ] Guided column-mapping UI for unrecognized layouts (drag headers → canonical fields, save as template)
-- [ ] Dashboard shell: headline cards (transactions analyzed, flagged, accounts, round trips) with real cleaning stats
-- [ ] Upload UX hardening: password-protected PDF error, duplicate-file (same hash) warning, unsupported-format guidance
+- [x] Review queue UI: low-confidence rows + suspected duplicates, big accept/fix/exclude buttons (done: 2026-07-02, B)
+  > built against mocks. Uses provisional `POST /transactions/{id}/review` with `{action: confirm|correct|exclude, corrections?}` — **Person A: this is B's proposed shape for the review-queue API**; reconcile when yours lands.
+- [x] Guided column-mapping UI for unrecognized layouts (drag headers → canonical fields, save as template) (done: 2026-07-02, B)
+  > drag or tap-to-assign, sample-row previews, required-field validation, save-as-bank-template → re-parse job. Provisional endpoints: `GET /documents/{id}/columns`, `POST /documents/{id}/template`; failed parse jobs signal mappability via detail `unrecognized layout:<doc_id>` (mock convention — Person A, tell B what the real signal will be).
+- [x] Dashboard shell: headline cards (transactions analyzed, flagged, accounts, round trips) with real cleaning stats (done: 2026-07-02, B)
+  > case picker + headline StatCards + cleaning summary card + review deep-link. Stats via provisional `GET /cases/{id}/stats` (CaseStats shape in frontend/src/api/types.ts); wire to real cleaning numbers when the cleaning suite lands.
+- [x] Upload UX hardening: password-protected PDF error, duplicate-file (same hash) warning, unsupported-format guidance (done: 2026-07-02, B)
+  > duplicate-409 + unsupported verified against the real API in Checkpoint 1; password-protected guidance keyed on "password" in the job error text — Person A, keep that word in the failure detail.
 
 ### ✅ Checkpoint 2 (merge to main)
 - [ ] All 6 statement-forge formats upload, parse, and clean end-to-end with review flow

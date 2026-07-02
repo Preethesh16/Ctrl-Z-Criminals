@@ -5,7 +5,18 @@
  * Mocks by default for offline dev; set VITE_API_MODE=real (.env.local)
  * to hit the FastAPI backend proxied at /api (see vite.config.ts).
  */
-import type { CaseCreate, CaseOut, DocumentOut, JobOut, Page, TransactionOut } from './types'
+import type {
+  CaseCreate,
+  CaseOut,
+  CaseStats,
+  ColumnTemplate,
+  DocumentColumns,
+  DocumentOut,
+  JobOut,
+  Page,
+  ReviewAction,
+  TransactionOut,
+} from './types'
 import { ApiError } from './errors'
 import { mockAdapter } from './mocks/mockAdapter'
 
@@ -56,6 +67,22 @@ const realAdapter = {
     const qs = params.toString()
     return request<Page<TransactionOut>>(`/cases/${caseId}/transactions${qs ? `?${qs}` : ''}`)
   },
+
+  /* Phase-2 provisional endpoints — paths are Person B's proposal until
+   * Person A publishes the review/cleaning/template contract. */
+  reviewTransaction: (txnId: string, action: ReviewAction) =>
+    request<TransactionOut>(`/transactions/${txnId}/review`, {
+      method: 'POST',
+      body: JSON.stringify(action),
+    }),
+  getCaseStats: (caseId: string) => request<CaseStats>(`/cases/${caseId}/stats`),
+  getDocumentColumns: (documentId: string) =>
+    request<DocumentColumns>(`/documents/${documentId}/columns`),
+  saveColumnTemplate: (documentId: string, template: ColumnTemplate) =>
+    request<JobOut>(`/documents/${documentId}/template`, {
+      method: 'POST',
+      body: JSON.stringify(template),
+    }),
 }
 
 export const api = USE_REAL_API ? realAdapter : mockAdapter
