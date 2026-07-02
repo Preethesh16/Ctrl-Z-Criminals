@@ -58,6 +58,18 @@ def _extract_via_ocr(path: Path, info: dict, scanned_pdf: bool) -> tuple[list["R
     return txns, info
 
 
+def _meta_from_grid(grid: list[list]) -> dict:
+    """Header metadata (account no, holder, bank, period) from the top rows
+    of a tabular file — bank CSV/Excel exports carry these above the table."""
+    from .headermeta import extract_header_meta
+
+    text = "\n".join(
+        " ".join(str(c) for c in row if c is not None and str(c).strip())
+        for row in grid[:15]
+    )
+    return extract_header_meta(text)
+
+
 def read_any_grid(path: str | Path) -> tuple[list[list], dict]:
     """Raw cell grid for any tabular-capable format (mapping UI backend)."""
     path = Path(path)
@@ -79,10 +91,9 @@ def read_any_grid(path: str | Path) -> tuple[list[list], dict]:
 
         grid, _ = read_docx_grid(path)
     elif kind == "txt":
-        import re
+        from .tabular import read_txt_fixed_width
 
-        lines = path.read_text(errors="replace").splitlines()
-        grid = [re.split(r"\s{2,}", ln.strip()) for ln in lines if ln.strip()]
+        grid = read_txt_fixed_width(path)
     else:
         raise UnsupportedFormat(f"no raw grid for file kind: {kind}")
     return grid, info
@@ -134,11 +145,23 @@ def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = Non
             # deltas are the ground truth.
             info["directions_repaired"] = repair_directions(txns)
     elif kind in ("xlsx", "xls"):
-        txns, ginfo = grid_to_txns(read_excel_grid(path, kind))
+        grid = read_excel_grid(path, kind)
+        info["header_meta"] = _meta_from_grid(grid)
+        txns, ginfo = grid_to_txns(grid)
     elif kind == "csv":
-        txns, ginfo = grid_to_txns(read_csv_grid(path))
+        grid = read_csv_grid(path)
+        info["header_meta"] = _meta_from_grid(grid)
+        txns, ginfo = grid_to_txns(grid)
     elif kind == "html_table":
-        txns, ginfo = grid_to_txns(read_html_table_grid(path))
+        import re as _re
+
+        grid = read_html_table_grid(path)
+        # account/holder usually sit OUTSIDE the <table> — strip tags and scan
+        from .headermeta import extract_header_meta
+
+        raw_text = _re.sub(r"<[^>]+>", "\n", path.read_text(errors="replace"))
+        info["header_meta"] = {**_meta_from_grid(grid), **extract_header_meta(raw_text)}
+        txns, ginfo = grid_to_txns(grid)
     elif kind == "image":
         return _extract_via_ocr(path, info, scanned_pdf=False)
     elif kind == "docx":
@@ -149,11 +172,10 @@ def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = Non
         info["header_meta"] = extract_header_meta(text)
         txns, ginfo = grid_to_txns(grid)
     elif kind == "txt":
-        # Fixed-width text statements: treat runs of 2+ spaces as delimiters.
-        lines = Path(path).read_text(errors="replace").splitlines()
-        import re
+        from .tabular import read_txt_fixed_width
 
-        grid = [re.split(r"\s{2,}", ln.strip()) for ln in lines if ln.strip()]
+        grid = read_txt_fixed_width(path)
+        info["header_meta"] = _meta_from_grid(grid)
         txns, ginfo = grid_to_txns(grid, base_confidence=0.8)
     else:
         raise UnsupportedFormat(f"unsupported file kind: {kind}")

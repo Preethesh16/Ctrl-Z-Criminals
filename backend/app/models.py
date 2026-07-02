@@ -101,6 +101,19 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class AnalysisResult(Base):
+    """Stored output of the last analysis run, one row per artifact kind
+    (graph / round_trips / correlation / disposition / summary)."""
+
+    __tablename__ = "analysis_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(30), index=True)
+    payload: Mapped[dict | list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class BankTemplate(Base):
     """Officer-saved column mapping for an unrecognized statement layout.
 

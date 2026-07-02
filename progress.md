@@ -69,14 +69,14 @@
 ## Phase 3 — Detection & Analysis
 
 ### Person A
-- [ ] Flow-graph builder: nodes/edges from RRN-UTR matched pairs (confirmed) + temporal-amount matching (probable)
-- [ ] Round-trip detection: time-respecting cycle search (increasing timestamps, hop bound 6, seeded sources) + loop scoring
-- [ ] FIFO money-trail engine: tranche queue, partial debit attribution, stop rules, "amount still resting" edge case
-- [ ] Correlation: common counterparty/UPI-ID across statements (≥2 statements or ≥3 sources)
-- [ ] Disposition breakdown: % cash / cheque / redirected / merchant / unclassified, per account + case-wide + per-trail
-- [ ] Detection rules FD-01…FD-08 with configurable thresholds + evidence payload per flag
-- [ ] Isolation Forest anomaly scoring (trained on statement-forge synthetic data)
-- [ ] Analysis APIs: graph JSON (Cytoscape format), round-trips, trail, disposition, flags
+- [x] Flow-graph builder: nodes/edges from RRN-UTR matched pairs (confirmed) + temporal-amount matching (probable) (done: 2026-07-02, A)
+- [x] Round-trip detection: time-respecting cycle search (increasing timestamps, hop bound 6, seeded sources) + loop scoring (done: 2026-07-02, A)
+- [x] FIFO money-trail engine: tranche queue, partial debit attribution, stop rules, "amount still resting" edge case (done: 2026-07-02, A)
+- [x] Correlation: common counterparty/UPI-ID across statements (≥2 statements or ≥3 sources) (done: 2026-07-02, A)
+- [x] Disposition breakdown: % cash / cheque / redirected / merchant / unclassified, per account + case-wide + per-trail (done: 2026-07-02, A)
+- [x] Detection rules FD-01…FD-08 with configurable thresholds + evidence payload per flag (done: 2026-07-02, A)
+- [x] Isolation Forest anomaly scoring (trained on statement-forge synthetic data) (done: 2026-07-02, A)
+- [x] Analysis APIs: graph JSON (Cytoscape format), round-trips, trail, disposition, flags (done: 2026-07-02, A)
 
 ### Person B
 - [ ] Cytoscape.js flow graph: node size/color encoding, solid/dashed edges, pan/zoom, PNG export

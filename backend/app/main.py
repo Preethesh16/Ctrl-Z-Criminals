@@ -340,6 +340,76 @@ def clean_case(case_id: str, db: Session = Depends(get_db)) -> dict:
     return run_cleaning(db, case_id)
 
 
+@app.post("/cases/{case_id}/analyze")
+def analyze_case(case_id: str, db: Session = Depends(get_db)) -> dict:
+    """One-button analysis: cleaning → rules → ML → graph → round trips →
+    correlation → disposition. Returns the summary; artifacts via GETs below."""
+    if db.get(Case, case_id) is None:
+        raise HTTPException(404, "case not found")
+    from .services.analysis import run_analysis
+
+    return run_analysis(db, case_id)
+
+
+def _artifact(db: Session, case_id: str, kind: str):
+    from .models import AnalysisResult
+
+    row = db.scalar(select(AnalysisResult).where(
+        AnalysisResult.case_id == case_id, AnalysisResult.kind == kind))
+    if row is None:
+        raise HTTPException(404, f"no {kind} yet — run POST /cases/{{id}}/analyze first")
+    return row.payload
+
+
+@app.get("/cases/{case_id}/graph")
+def case_graph(case_id: str, db: Session = Depends(get_db)):
+    """Cytoscape.js elements: {nodes: [{data}], edges: [{data}]}."""
+    return _artifact(db, case_id, "graph")
+
+
+@app.get("/cases/{case_id}/round-trips")
+def case_round_trips(case_id: str, db: Session = Depends(get_db)):
+    return _artifact(db, case_id, "round_trips")
+
+
+@app.get("/cases/{case_id}/correlation")
+def case_correlation(case_id: str, db: Session = Depends(get_db)):
+    return _artifact(db, case_id, "correlation")
+
+
+@app.get("/cases/{case_id}/disposition")
+def case_disposition(case_id: str, db: Session = Depends(get_db)):
+    return _artifact(db, case_id, "disposition")
+
+
+@app.get("/cases/{case_id}/trail/{txn_id}")
+def money_trail(case_id: str, txn_id: str, stop_rule: str = "tranche",
+                db: Session = Depends(get_db)) -> dict:
+    """FIFO money trail for one credit (mentor requirement 5)."""
+    if stop_rule not in ("tranche", "balance"):
+        raise HTTPException(422, "stop_rule must be 'tranche' or 'balance'")
+    target = db.get(Transaction, txn_id)
+    if target is None or target.case_id != case_id:
+        raise HTTPException(404, "transaction not found in this case")
+    if target.direction != "CREDIT":
+        raise HTTPException(422, "money trail starts from a CREDIT transaction")
+    from dataclasses import asdict
+
+    from .detection.fifo_trail import fifo_trail
+
+    account_txns = db.scalars(select(Transaction).where(
+        Transaction.case_id == case_id,
+        Transaction.account_ref == target.account_ref)).all()
+    trail = fifo_trail(account_txns, txn_id, stop_rule=stop_rule)
+    out = asdict(trail)
+    for key in ("credit_amount", "pre_credit_balance", "spent", "resting"):
+        out[key] = str(out[key]) if out[key] is not None else None
+    for hop in out["hops"]:
+        hop["attributed"] = str(hop["attributed"])
+        hop["debit_total"] = str(hop["debit_total"])
+    return out
+
+
 @app.get("/cases/{case_id}/transactions", response_model=Page[TransactionOut])
 def list_transactions(
     case_id: str,
