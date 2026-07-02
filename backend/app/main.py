@@ -9,7 +9,16 @@ from .config import get_settings
 from .db import Base, SessionLocal, engine, get_db
 from .ingest.detector import detect_file_kind
 from .models import AuditLog, Case, Document, Job, Transaction
-from .schemas import CaseCreate, CaseOut, DocumentOut, JobOut, Page, TransactionOut, UploadOut
+from .schemas import (
+    CaseCreate,
+    CaseOut,
+    DocumentOut,
+    JobOut,
+    Page,
+    TransactionOut,
+    TransactionReview,
+    UploadOut,
+)
 from .services.extraction import process_document, sha256_file
 
 Base.metadata.create_all(engine)
@@ -125,6 +134,41 @@ def list_documents(case_id: str, db: Session = Depends(get_db)):
         ) or 0
         out.append(item)
     return out
+
+
+@app.post("/transactions/{txn_id}/review", response_model=TransactionOut)
+def review_transaction(txn_id: str, body: TransactionReview, db: Session = Depends(get_db)):
+    """Officer review: confirm / correct / exclude a row. Fully audit-logged."""
+    txn = db.get(Transaction, txn_id)
+    if txn is None:
+        raise HTTPException(404, "transaction not found")
+
+    changes: dict = {"action": body.action}
+    if body.action == "exclude":
+        txn.excluded = True
+    elif body.action == "correct":
+        from decimal import Decimal, InvalidOperation
+
+        for field in ("txn_date", "direction", "narration_raw", "channel"):
+            value = getattr(body, field)
+            if value is not None:
+                changes[field] = {"from": str(getattr(txn, field)), "to": str(value)}
+                setattr(txn, field, value)
+        if body.amount_inr is not None:
+            try:
+                amount = Decimal(body.amount_inr)
+            except InvalidOperation:
+                raise HTTPException(422, "amount_inr must be a decimal string") from None
+            changes["amount_inr"] = {"from": str(txn.amount_inr), "to": str(amount)}
+            txn.amount_inr = amount
+    txn.needs_review = False
+    txn.extraction_confidence = 1.0  # officer-verified
+
+    db.add(AuditLog(case_id=txn.case_id, actor="officer", action=f"review_{body.action}",
+                    detail={"transaction_id": txn.id, **changes}))
+    db.commit()
+    db.refresh(txn)
+    return txn
 
 
 @app.post("/cases/{case_id}/clean")

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .detector import detect_file_kind
 from .pdf_digital import FALLBACK_HEADER, looks_like_fallback_grid, pdf_has_text, read_pdf_grid
-from .rows import RawTxn, grid_to_txns
+from .rows import RawTxn, grid_to_txns, repair_directions
 from .tabular import read_csv_grid, read_excel_grid, read_html_table_grid
 
 
@@ -44,6 +44,10 @@ def extract_rows(path: str | Path) -> tuple[list[RawTxn], dict]:
                 if fallback:
                     info["extraction_mode"] = "pdf_text_regex_retry"
                     txns, ginfo = grid_to_txns([FALLBACK_HEADER, *fallback], base_confidence=0.85)
+        if info["extraction_mode"].startswith("pdf_text_regex"):
+            # Regex fallback can't know column order/direction — balance
+            # deltas are the ground truth.
+            info["directions_repaired"] = repair_directions(txns)
     elif kind in ("xlsx", "xls"):
         txns, ginfo = grid_to_txns(read_excel_grid(path, kind))
     elif kind == "csv":
