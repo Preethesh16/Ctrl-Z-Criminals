@@ -106,6 +106,20 @@ class TransactionReview(BaseModel):
     channel: str | None = None
 
 
+class BankTemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    bank: str | None = None
+    header_signature: str = Field(min_length=1)
+    mapping: dict[str, int]
+
+
+class BankTemplateOut(BankTemplateIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+
+
 class Page[T](BaseModel):
     items: list[T]
     total: int

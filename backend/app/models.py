@@ -101,6 +101,23 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class BankTemplate(Base):
+    """Officer-saved column mapping for an unrecognized statement layout.
+
+    header_signature = normalized '|'-joined header cells; at parse time an
+    unmapped grid is matched against saved signatures before failing.
+    """
+
+    __tablename__ = "bank_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(120))
+    bank: Mapped[str | None] = mapped_column(String(80))
+    header_signature: Mapped[str] = mapped_column(Text, unique=True)
+    mapping: Mapped[dict] = mapped_column(JSON)  # canonical field -> column index
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class AuditLog(Base):
     """Append-only. Every mutation, parse and officer action lands here."""
 

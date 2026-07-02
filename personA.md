@@ -32,6 +32,15 @@
 
 ## Log
 
+### 2026-07-02 — Session 4: Checkpoint 1 passed; OCR + DOCX + templates
+- Pulled main: Deepthi reconciled the API layer to the contract and **verified Checkpoint 1 end-to-end** (UI → /api proxy → FastAPI → 47 txns). Phase 1 fully closed.
+- **OCR pipeline** (`ingest/ocr.py`, `ocr_preprocess.py`): pdf2image rasterize → OpenCV deskew/denoise/adaptive-threshold → pluggable engine (PaddleOCR if installed, else Tesseract via pytesseract) → OCR lines with confidence → same `_LINE` regex path as digital PDFs → per-line OCR confidence blended into row confidence → direction repair. Scanned PDFs and photo uploads route through it. ⚠ validation blocked: `tesseract` binary not installed yet on this machine (`sudo pacman -S tesseract tesseract-data-eng`); golden test auto-skips.
+- **DOCX parser** (`ingest/docxfile.py`): tables → grid, paragraphs → header meta.
+- **statement-forge v2**: mule6 now DOCX, mule8 a 200-DPI image-only scanned PDF (exercises OCR); stale-output cleanup; DOCX round-trip green in golden tests.
+- **Saved-template API**: `BankTemplate` model + GET/POST `/templates` (upsert by normalized header signature) — backend for Deepthi's column-mapping UI. Auto-application at parse time still TODO (bank-templates task).
+- Tests: 38 passing. Contract regenerated. New deps: pdf2image, opencv-python-headless, pytesseract, python-docx.
+- Next: install tesseract → validate OCR on forge scanned PDF + the real dataset's image-like PDFs; template auto-application; 4 stubborn PDF layouts; then Phase 3 detection.
+
 ### 2026-07-02 — Session 3: direction repair + statement-forge + review API
 - Balance audit round 1 exposed a systematic bug: `pdf_text_regex` fallback dropped credit rows (`0.00 | 500.00 | bal` → amount 0 → skipped) and guessed all directions as DEBIT. Fixes:
   - fallback now emits 5-col rows keeping BOTH amount columns;

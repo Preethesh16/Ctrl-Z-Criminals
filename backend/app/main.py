@@ -10,6 +10,8 @@ from .db import Base, SessionLocal, engine, get_db
 from .ingest.detector import detect_file_kind
 from .models import AuditLog, Case, Document, Job, Transaction
 from .schemas import (
+    BankTemplateIn,
+    BankTemplateOut,
     CaseCreate,
     CaseOut,
     DocumentOut,
@@ -134,6 +136,33 @@ def list_documents(case_id: str, db: Session = Depends(get_db)):
         ) or 0
         out.append(item)
     return out
+
+
+@app.get("/templates", response_model=list[BankTemplateOut])
+def list_templates(db: Session = Depends(get_db)):
+    from .models import BankTemplate
+
+    return db.scalars(select(BankTemplate).order_by(BankTemplate.created_at.desc())).all()
+
+
+@app.post("/templates", response_model=BankTemplateOut)
+def save_template(body: BankTemplateIn, db: Session = Depends(get_db)):
+    """Save an officer-defined column mapping for reuse on future statements."""
+    from .models import BankTemplate
+
+    existing = db.scalar(select(BankTemplate).where(
+        BankTemplate.header_signature == body.header_signature))
+    if existing is not None:
+        existing.name, existing.bank, existing.mapping = body.name, body.bank, body.mapping
+        template = existing
+    else:
+        template = BankTemplate(**body.model_dump())
+        db.add(template)
+    db.add(AuditLog(actor="officer", action="template_saved",
+                    detail={"name": body.name, "signature": body.header_signature[:120]}))
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 @app.post("/transactions/{txn_id}/review", response_model=TransactionOut)

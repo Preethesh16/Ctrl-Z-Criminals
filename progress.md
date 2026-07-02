@@ -37,8 +37,9 @@
 ## Phase 2 — Full Ingestion & Cleaning
 
 ### Person A
-- [ ] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/threshold) + PaddleOCR primary + Tesseract cross-check confidence
-- [ ] DOCX parser (python-docx tables) and image/photo parser
+- [x] OCR pipeline: pdf2image + OpenCV preprocessing (deskew/denoise/threshold) + pluggable PaddleOCR/Tesseract engines, per-line confidence → row confidence (done: 2026-07-02, A)
+  > blocked (validation only): system `tesseract` not yet installed on A's machine (`sudo pacman -S tesseract tesseract-data-eng`); scanned-PDF golden test auto-skips until then
+- [x] DOCX parser (python-docx tables) and image/photo parser (done: 2026-07-02, A)
 - [ ] docling fallback for digital PDFs when balance reconciliation fails
 - [x] Per-row extraction_confidence; review-queue API (confirm/correct/exclude) (done: 2026-07-02, A)
 - [x] Cleaning: exact + fuzzy duplicate detection (flagged, never silently deleted) (done: 2026-07-02, A)
@@ -47,7 +48,8 @@
 - [ ] Bank templates: SBI, HDFC, ICICI, Axis, Kotak, Canara, PNB, BoB
 - [x] `tools/statement-forge/`: synthetic fraud case generator — 9 accounts / 5 formats (PDF, CSV, XLSX, HTML-xls, TXT), planted round trip + smurfing + cash-out + reversal, ground-truth manifest, golden round-trip tests (done: 2026-07-02, A)
   > note: scanned-PDF + DOCX forge outputs land with the Phase-2 OCR/DOCX parsers
-- [ ] Saved-template API for the column-mapping UI
+- [x] Saved-template API for the column-mapping UI — GET/POST `/templates`, upsert by header signature (done: 2026-07-02, A)
+  > note: template auto-application at parse time (unmapped grid → match saved signature) lands with the bank-templates task
 
 ### Person B
 - [ ] Review queue UI: low-confidence rows + suspected duplicates, big accept/fix/exclude buttons

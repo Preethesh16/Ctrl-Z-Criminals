@@ -225,6 +225,39 @@ def write_html_xls(a: Account, path: Path):
     )
 
 
+def write_docx(a: Account, path: Path):
+    import docx
+
+    d = docx.Document()
+    d.add_heading(f"{a.bank} BANK", level=2)
+    d.add_paragraph(f"Account No: {a.number}")
+    d.add_paragraph(f"Customer Name: {a.name}")
+    table = d.add_table(rows=1, cols=5)
+    for i, h in enumerate(["Tran Date", "Particulars", "Debit", "Credit", "Balance"]):
+        table.rows[0].cells[i].text = h
+    for dt, narr, dr, cr, bal in a.rows:
+        cells = table.add_row().cells
+        cells[0].text = dt.strftime("%d-%m-%Y")
+        cells[1].text = narr
+        cells[2].text = f"{dr:.2f}" if dr else ""
+        cells[3].text = f"{cr:.2f}" if cr else ""
+        cells[4].text = f"{bal:.2f}"
+    d.save(str(path))
+
+
+def write_scanned_pdf(a: Account, path: Path):
+    """Image-only PDF (no text layer) — exercises the OCR pipeline.
+    Rendered from the digital PDF at 200 DPI, like a branch scan."""
+    import tempfile
+
+    from pdf2image import convert_from_path
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        write_pdf(a, Path(tmp.name))
+        pages = convert_from_path(tmp.name, dpi=200)
+    pages[0].save(str(path), save_all=True, append_images=pages[1:])
+
+
 WRITERS = [
     ("victim_hdfc.pdf", write_pdf),
     ("mule1_sbi.csv", write_csv),
@@ -232,14 +265,17 @@ WRITERS = [
     ("mule3_kotak.pdf", write_pdf),
     ("mule4_hdfc.xls", write_html_xls),
     ("mule5_sbi.txt", write_txt),
-    ("mule6_axis.csv", write_csv),
+    ("mule6_axis.docx", write_docx),
     ("mule7_kotak.xlsx", write_xlsx),
-    ("mule8_hdfc.csv", write_csv),
+    ("mule8_hdfc_scanned.pdf", write_scanned_pdf),
 ]
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    for stale in OUT.glob("*"):  # deterministic output — remove previous run
+        if stale.suffix in (".pdf", ".csv", ".xlsx", ".xls", ".txt", ".docx", ".json"):
+            stale.unlink()
     accounts, manifest = build_case()
     for account, (fname, writer) in zip(accounts, WRITERS):
         writer(account, OUT / fname)
