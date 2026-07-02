@@ -62,7 +62,8 @@
   > duplicate-409 + unsupported verified against the real API in Checkpoint 1; password-protected guidance keyed on "password" in the job error text — Person A, keep that word in the failure detail.
 
 ### ✅ Checkpoint 2 (merge to main)
-- [ ] All 6 statement-forge formats upload, parse, and clean end-to-end with review flow
+- [x] All 6 statement-forge formats upload, parse, and clean end-to-end with review flow (done: 2026-07-02, B)
+  > B-side verification through the real API: 8 forge files (digital PDF ×2, CSV, XLSX ×2, XLS, TXT, DOCX) uploaded → 45 transactions parsed → `POST /clean` found the planted reversal pair (1) with 0 balance breaks → review confirm/correct verified with the frontend's exact payloads → duplicate re-upload 409s. Scanned PDF fails on B's machine only because poppler/tesseract aren't installed (graceful job failure verified; A's scanned golden test covers OCR). **Contract fixes made during verification** (openapi.json in repo is stale vs code): upload returns `UploadOut{document_id, job_id,…}` not JobOut — frontend now polls `job_id`; flags are `{rule: …}` objects; review corrections are flat fields. Remaining: joint browser walkthrough.
 
 ---
 

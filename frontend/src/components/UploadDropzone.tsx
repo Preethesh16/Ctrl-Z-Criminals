@@ -120,8 +120,9 @@ export function UploadDropzone({
         },
       ])
       try {
-        const initialJob = await api.uploadDocument(caseId, file)
-        patchItem(key, { phase: 'parsing', progress: Math.max(5, initialJob.progress) })
+        const upload = await api.uploadDocument(caseId, file)
+        patchItem(key, { phase: 'parsing', progress: 5 })
+        const initialJob = await api.getJob(upload.job_id)
         await trackJob(key, initialJob)
       } catch (error) {
         const status = error instanceof ApiError ? error.status : null
@@ -215,8 +216,16 @@ export function UploadDropzone({
             onMapped={(job) => {
               const { key } = mappingTarget
               setMappingTarget(null)
-              patchItem(key, { phase: 'parsing', progress: 5, errorText: null })
-              void trackJob(key, job)
+              if (job) {
+                patchItem(key, { phase: 'parsing', progress: 5, errorText: null })
+                void trackJob(key, job)
+              } else {
+                patchItem(key, {
+                  errorText:
+                    'Template saved. Upload this file once more — it will be read automatically now.',
+                  mappingDocumentId: null,
+                })
+              }
             }}
           />
         )}
