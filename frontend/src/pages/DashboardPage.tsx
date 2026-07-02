@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { CaseOut, CaseStats } from '../api/types'
+import type { CaseOut, CaseStats, CleanReport } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { StatCard } from '../components/ui/StatCard'
@@ -16,6 +16,8 @@ import { fadeIn, staggerContainer } from '../theme/motion'
 export function DashboardPage() {
   const [cases, setCases] = useState<CaseOut[] | null>(null)
   const [stats, setStats] = useState<CaseStats | null>(null)
+  const [cleanReport, setCleanReport] = useState<CleanReport | null>(null)
+  const [cleaningNow, setCleaningNow] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedCaseId = searchParams.get('case')
 
@@ -33,10 +35,28 @@ export function DashboardPage() {
   useEffect(() => {
     if (!selectedCaseId) return
     setStats(null)
+    setCleanReport(null)
     api.getCaseStats(selectedCaseId).then(setStats).catch(() => {})
   }, [selectedCaseId])
 
   const selectedCase = cases?.find((c) => c.id === selectedCaseId) ?? null
+
+  async function runCleaning() {
+    if (!selectedCaseId) return
+    setCleaningNow(true)
+    try {
+      setCleanReport(await api.cleanCase(selectedCaseId))
+      api.getCaseStats(selectedCaseId).then(setStats).catch(() => {})
+    } catch {
+      /* keep previous state; the officer can retry */
+    } finally {
+      setCleaningNow(false)
+    }
+  }
+
+  const duplicates = cleanReport?.duplicate_pairs ?? stats?.cleaning.duplicates_flagged
+  const reversals = cleanReport?.reversal_pairs ?? stats?.cleaning.reversals_detected
+  const balanceBreaks = cleanReport?.balance_breaks ?? stats?.cleaning.balance_breaks
 
   return (
     <motion.div variants={staggerContainer} initial="hidden" animate="visible">
@@ -98,37 +118,38 @@ export function DashboardPage() {
                 <ul className="flex flex-col gap-2 text-body text-text-primary">
                   <li className="flex justify-between">
                     <span>Possible duplicate transactions flagged</span>
-                    <span className="font-medium tabular-nums">
-                      {stats.cleaning.duplicates_flagged}
-                    </span>
+                    <span className="font-medium tabular-nums">{duplicates}</span>
                   </li>
                   <li className="flex justify-between">
                     <span>Failed / reversed transactions detected</span>
-                    <span className="font-medium tabular-nums">
-                      {stats.cleaning.reversals_detected}
-                    </span>
+                    <span className="font-medium tabular-nums">{reversals}</span>
                   </li>
                   <li className="flex justify-between">
                     <span>Balance inconsistencies found</span>
                     <span
                       className={`font-medium tabular-nums ${
-                        stats.cleaning.balance_breaks > 0 ? 'text-danger' : ''
+                        (balanceBreaks ?? 0) > 0 ? 'text-danger' : ''
                       }`}
                     >
-                      {stats.cleaning.balance_breaks}
+                      {balanceBreaks}
                     </span>
                   </li>
                 </ul>
               ) : (
                 <p className="text-body text-text-secondary">Loading…</p>
               )}
-              {stats && stats.needs_review_count > 0 && (
-                <div className="mt-4 border-t border-border pt-4">
+              <div className="mt-4 border-t border-border pt-4 flex gap-3">
+                <Button onClick={runCleaning} disabled={cleaningNow || !stats}>
+                  {cleaningNow ? 'Checking…' : cleanReport ? 'Re-run cleaning' : 'Run cleaning'}
+                </Button>
+                {stats && stats.needs_review_count > 0 && (
                   <Link to={`/cases/${selectedCase.id}/wizard`}>
-                    <Button>Review {stats.needs_review_count} rows now</Button>
+                    <Button variant="secondary">
+                      Review {stats.needs_review_count} rows now
+                    </Button>
                   </Link>
-                </div>
-              )}
+                )}
+              </div>
             </Card>
 
             <Card title="Analysis">

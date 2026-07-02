@@ -31,8 +31,9 @@ export function ColumnMappingModal({
 }: {
   documentId: string
   onClose: () => void
-  /** Called with the re-parse job once the template is saved. */
-  onMapped: (job: JobOut) => void
+  /** Called once the template is saved; job is null when the server can't
+   * re-parse automatically (officer re-uploads the file instead). */
+  onMapped: (job: JobOut | null) => void
 }) {
   const [doc, setDoc] = useState<DocumentColumns | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -94,7 +95,7 @@ export function ColumnMappingModal({
       for (const [field, index] of Object.entries(mapping)) {
         inverted[index as number] = field as CanonicalField
       }
-      const job = await api.saveColumnTemplate(documentId, {
+      const job = await api.saveColumnTemplate(doc!, {
         bank_name: bankName.trim(),
         mapping: inverted,
       })

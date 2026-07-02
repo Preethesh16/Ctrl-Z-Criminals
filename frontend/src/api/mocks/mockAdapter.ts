@@ -6,17 +6,21 @@
  * All data is synthetic — never derived from the confidential dataset.
  */
 import type {
+  BankTemplateIn,
+  BankTemplateOut,
   CaseCreate,
   CaseOut,
   CaseStats,
+  CleanReport,
   ColumnTemplate,
   Direction,
   DocumentColumns,
   DocumentOut,
   JobOut,
   Page,
-  ReviewAction,
   TransactionOut,
+  TransactionReview,
+  UploadOut,
 } from '../types'
 import type { TransactionQuery } from '../client'
 import { ApiError } from '../errors'
@@ -28,6 +32,7 @@ const documents = new Map<string, DocumentOut>()
 const jobs = new Map<string, JobOut & { _fileKey?: string }>()
 const transactionsByCase = new Map<string, TransactionOut[]>()
 const fileKeysByCase = new Map<string, Set<string>>()
+const templates = new Map<string, BankTemplateOut>()
 
 let idCounter = 0
 const nextId = (prefix: string) => `${prefix}_${++idCounter}`
@@ -74,7 +79,7 @@ function generateTransactions(documentId: string, seed: string): TransactionOut[
     balance += direction === 'CREDIT' ? amount : -amount
     const confidence = rand() < 0.85 ? 1.0 : 0.55 + rand() * 0.44
     // Sprinkle a few suspected duplicates so the review queue has both kinds of work.
-    const flags = rand() < 0.04 ? ['SUSPECTED_DUPLICATE'] : []
+    const flags = rand() < 0.04 ? [{ rule: 'DUPLICATE-SUSPECT', tier: 'fuzzy' }] : []
     const date = new Date(t)
     rows.push({
       id: nextId('txn'),
@@ -144,7 +149,7 @@ export const mockAdapter = {
     return found
   },
 
-  async uploadDocument(caseId: string, file: File): Promise<JobOut> {
+  async uploadDocument(caseId: string, file: File): Promise<UploadOut> {
     await delay(300 + Math.random() * 400)
     if (!cases.has(caseId)) throw new ApiError(404, 'case not found')
 
@@ -216,7 +221,12 @@ export const mockAdapter = {
     }
 
     jobs.set(job.id, job)
-    return { ...job }
+    return {
+      document_id: documentId,
+      job_id: job.id,
+      filename: file.name,
+      sha256: seededRandom(fileKey)().toString(16).slice(2).padEnd(16, '0').repeat(4).slice(0, 64),
+    }
   },
 
   async getJob(jobId: string): Promise<JobOut> {
@@ -269,25 +279,74 @@ export const mockAdapter = {
 
   /* ---------------- Phase-2 provisional endpoints ---------------- */
 
-  async reviewTransaction(txnId: string, action: ReviewAction): Promise<TransactionOut> {
+  async reviewTransaction(txnId: string, review: TransactionReview): Promise<TransactionOut> {
     await delay(180)
     for (const txns of transactionsByCase.values()) {
       const txn = txns.find((t) => t.id === txnId)
       if (!txn) continue
-      if (action.action === 'exclude') {
+      if (review.action === 'exclude') {
         txn.excluded = true
         txn.needs_review = false
-      } else if (action.action === 'confirm') {
+      } else if (review.action === 'confirm') {
         txn.needs_review = false
-        txn.flags = txn.flags.filter((f) => f !== 'SUSPECTED_DUPLICATE')
+        txn.flags = txn.flags.filter((f) => f.rule !== 'DUPLICATE-SUSPECT')
       } else {
-        Object.assign(txn, action.corrections)
+        if (review.txn_date) txn.txn_date = review.txn_date
+        if (review.amount_inr) txn.amount_inr = review.amount_inr
+        if (review.direction) txn.direction = review.direction
+        if (review.narration_raw) txn.narration_raw = review.narration_raw
+        if (review.channel) txn.channel = review.channel
         txn.extraction_confidence = 1.0
         txn.needs_review = false
       }
       return { ...txn }
     }
     throw new ApiError(404, 'transaction not found')
+  },
+
+  async cleanCase(caseId: string): Promise<CleanReport> {
+    await delay(400)
+    const txns = transactionsByCase.get(caseId)
+    if (!txns) throw new ApiError(404, 'case not found')
+    const rand = seededRandom(`clean-${caseId}`)
+    // Simulate a reversal pair: exclude two matching-amount rows.
+    let reversals = 0
+    if (txns.length > 10 && !txns.some((t) => t.flags.some((f) => f.rule === 'REVERSED'))) {
+      const debit = txns.find((t) => t.direction === 'DEBIT' && !t.excluded)
+      const credit = txns.find(
+        (t) => t.direction === 'CREDIT' && !t.excluded && t.id !== debit?.id,
+      )
+      if (debit && credit) {
+        debit.flags = [...debit.flags, { rule: 'REVERSED', paired_with: credit.id }]
+        credit.flags = [...credit.flags, { rule: 'REVERSED', paired_with: debit.id }]
+        debit.excluded = true
+        credit.excluded = true
+        reversals = 1
+      }
+    }
+    return {
+      transactions: txns.length,
+      balance_breaks: Math.floor(rand() * 2),
+      duplicate_pairs: txns.filter((t) => t.flags.some((f) => f.rule === 'DUPLICATE-SUSPECT'))
+        .length,
+      reversal_pairs: reversals,
+    }
+  },
+
+  async listTemplates(): Promise<BankTemplateOut[]> {
+    await delay(150)
+    return [...templates.values()]
+  },
+
+  async saveTemplate(template: BankTemplateIn): Promise<BankTemplateOut> {
+    await delay(200)
+    const saved: BankTemplateOut = {
+      ...template,
+      id: nextId('tpl'),
+      created_at: new Date().toISOString(),
+    }
+    templates.set(template.header_signature, saved)
+    return saved
   },
 
   async getCaseStats(caseId: string): Promise<CaseStats> {
@@ -305,8 +364,11 @@ export const mockAdapter = {
       accounts_count: 2 + Math.floor(rand() * 6),
       round_trips_count: 0, // detection engine lands in Phase 3
       cleaning: {
-        duplicates_flagged: txns.filter((t) => t.flags.includes('SUSPECTED_DUPLICATE')).length,
-        reversals_detected: Math.floor(rand() * 3),
+        duplicates_flagged: txns.filter((t) =>
+          t.flags.some((f) => f.rule === 'DUPLICATE-SUSPECT'),
+        ).length,
+        reversals_detected: txns.filter((t) => t.flags.some((f) => f.rule === 'REVERSED'))
+          .length,
         balance_breaks: Math.floor(rand() * 2),
       },
     }
@@ -336,11 +398,21 @@ export const mockAdapter = {
     }
   },
 
-  async saveColumnTemplate(documentId: string, template: ColumnTemplate): Promise<JobOut> {
+  async saveColumnTemplate(
+    docColumns: DocumentColumns,
+    template: ColumnTemplate,
+  ): Promise<JobOut | null> {
     await delay(300)
-    const doc = documents.get(documentId)
+    const doc = documents.get(docColumns.document_id)
     if (!doc) throw new ApiError(404, 'document not found')
-    void template // stored server-side in the real API
+    templates.set(docColumns.columns.map((c) => c.header.toLowerCase()).join('|'), {
+      name: template.bank_name,
+      bank: template.bank_name,
+      header_signature: docColumns.columns.map((c) => c.header.toLowerCase()).join('|'),
+      mapping: {},
+      id: nextId('tpl'),
+      created_at: new Date().toISOString(),
+    })
     doc.status = 'parsing'
     doc.error = null
     const job: JobOut & { _fileKey?: string; _docId?: string } = {
@@ -351,7 +423,7 @@ export const mockAdapter = {
       progress: 0,
       detail: null,
       _fileKey: `remap:${doc.sha256}`,
-      _docId: documentId,
+      _docId: docColumns.document_id,
     }
     jobs.set(job.id, job)
     return { ...job }
