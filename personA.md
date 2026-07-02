@@ -39,7 +39,10 @@
   3. **The `\b` bug (critical)**: `parse_amount`'s Dr/Cr stripper used `\b`, but regex has NO word boundary between digit and letter — glued suffixes ("11,000.00Cr") never parsed and balances silently became None → no balance chain → no direction repair → silent all-DEBIT files. Fixed with `(?<![A-Za-z])` lookbehind + regression tests.
 - Former worst offenders after fix: Statement 578… 2214 rows / full balance chain / 691 credits repaired / 0 breaks; 45170 stmt 1565 rows 0 breaks (was 94.7% break rate); STATEMENT 1026 0 breaks; KOMAL 6 breaks in 228 (genuine statement quirks — FD-07's job).
 - Final validation: **160/162, 195,041 txns, 0 crashes**; channel classification improved (UNKNOWN −2.1k, refs recovered feed NEFT/IMPS/CHEQUE up). 69/69 tests.
-- Lane A closed. **Final balance-audit: 112/148 balance-bearing docs reconcile perfectly (was 78 at first measurement); of the 36 with breaks, all but one are ≤8.5% break-rate (statement quirks FD-07 correctly surfaces).** One known systematic misparse remains: `soa_0167042251865512.pdf` (97.6% breaks — column order misread by the regex fallback; single file, logged for a future pass).
+- Lane A closed. **Final balance-audit: 112/148 balance-bearing docs reconcile perfectly (was 78 at first measurement); of the 36 with breaks, all but one are ≤8.5% break-rate (statement quirks FD-07 correctly surfaces).**
+
+### 2026-07-03 — Session 10: soa fixed (last known misparse)
+- `soa_0167042251865512.pdf` (AU Bank web export, 222 pages): txn lines carry `amount rate lcy_amount` with the TRUE balance alone on the next line — parser took the LCY duplicate as balance (97.6% breaks). Fix in `collect_text_lines`: lone-amount follow-up line becomes the row's balance; when the captured balance equalled the amount (LCY duplicate), the middle rate column is dropped as noise. Result: **4.3% breaks, full balance chain, 642 credits repaired, refs extracted.** 69/69 tests. No known systematic misparses remain.
 
 ### 2026-07-02 — Session 8: hardening + 100% effective real-data coverage
 - API hardening: upload filename traversal fix (basename-only), empty-file 422, global 500 envelope. 68 tests.
