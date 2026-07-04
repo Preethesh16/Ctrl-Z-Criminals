@@ -89,6 +89,14 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 20: PDF exports everywhere + merges to main
+- Merged `person-b/p4-review-account-report` into main (a36651a), then built branch `person-b/p4-pdf-exports`:
+- **New `lib/graphRoles.ts`**: COLORS/roles/stylesheet/element-builder extracted from FlowGraphPage (needed by the PDF lib without circular imports). `SUSPICION_ORDER` = mule → suspect → victim → other; the Flow Graph accounts panel now lists in that order (user request).
+- **New `lib/analysisPdf.ts`** (all client-side jsPDF, nothing uploaded): `downloadGraphReportPdf` (graph PNG + suspicion-ordered accounts + round-trip step tables + focused-account transfers), `downloadTrailReportPdf` (Sankey PNG via `svgToPng` + layer-by-layer hop table with counterparty roles + resting callout), `downloadVisualAnalysisPdf` (all three features: flow image + accounts, round trips, top-3 flagged credits' trails, disposition), `renderGraphPngOffscreen` (hidden-div cytoscape for the Report page).
+- **Buttons**: Flow Graph header "⬇ Download PDF" + "⬇ PDF report for this account" inside NodeDrawer (header button is covered when the drawer is open — found via headless test); Money Trail "⬇ Download PDF" next to stop-rule toggle; Reports page 4th card "Visual analysis (PDF)".
+- Verified: mock case → graph PDF (2pp, image, focus section) + trail PDF (1p, Sankey image, layers); real backend forge case `CEN/DOCKER/2026` → visual-analysis PDF (4pp: flow+accounts / round-tripping / trails layer-by-layer / disposition). Docker web rebuilt.
+
+
 ### 2026-07-04 — Session 19: "All accounts" panel on Flow Graph
 - Side column now opens with a searchable **All accounts (N)** list (role icon ★/red/amber/grey + in/out totals + txn count; sorted victim → mule → suspect → other, then by volume). Clicking a row = identical effect to tapping the node on canvas (`focusAccount` → setSelectedNode + `cy.animate(center)`): neighbourhood glow, green-in/red-out edges, drawer with Connected accounts. `deriveRoles` result lifted to a component-level `useMemo` shared by the canvas mount and the list.
 - Round-trips section moved below the accounts list in the same aside (aside now always renders with the graph).

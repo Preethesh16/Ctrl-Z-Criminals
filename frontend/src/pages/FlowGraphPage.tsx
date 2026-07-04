@@ -4,193 +4,21 @@ import { Link, useSearchParams } from 'react-router-dom'
 import cytoscape from 'cytoscape'
 import type { Core, EventObject } from 'cytoscape'
 import { api } from '../api/client'
-import type {
-  CaseGraph,
-  CaseOut,
-  EdgeTier,
-  GraphEdgeData,
-  GraphNodeData,
-  RoundTrip,
-} from '../api/types'
+import type { CaseGraph, CaseOut, GraphEdgeData, GraphNodeData, RoundTrip } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { NodeDrawer, EdgeDrawer } from '../components/GraphDrawers'
+import { downloadGraphReportPdf } from '../lib/analysisPdf'
 import { formatINR } from '../lib/format'
+import {
+  buildGraphStylesheet,
+  deriveRoles,
+  graphElements,
+  SUSPICION_ORDER,
+  type NodeConnection,
+  type NodeRole,
+} from '../lib/graphRoles'
 import { fadeIn, staggerContainer } from '../theme/motion'
-
-/** Design-token palette for the graph (sanctioned hexes from theme.css). */
-const COLORS = {
-  victim: '#2f6fed',
-  mule: '#e5484d',
-  suspect: '#f5a623',
-  other: '#6b7280',
-  edge: '#9ca3af',
-  loop: '#e5484d',
-  label: '#16161d',
-  ownBorder: '#16161d',
-}
-
-export type NodeRole = 'victim' | 'mule' | 'suspect' | 'other'
-
-/**
- * Officer-facing roles derived from analysis fields the backend already
- * publishes: mule = high suspicion (round-trip member or accumulator),
- * suspect = medium suspicion (3+ flags), victim = the unsuspicious own
- * account that sends the most money toward mule/suspect accounts.
- */
-function deriveRoles(
-  nodes: Array<{ data: GraphNodeData }>,
-  edges: Array<{ data: GraphEdgeData }>,
-): Map<string, NodeRole> {
-  const roles = new Map<string, NodeRole>()
-  for (const { data } of nodes) {
-    if (data.suspicion === 'high') roles.set(data.id, 'mule')
-    else if (data.suspicion === 'medium') roles.set(data.id, 'suspect')
-    else roles.set(data.id, 'other')
-  }
-  // Money each clean own-account sends into suspicious hands.
-  const sentToSuspicious = new Map<string, number>()
-  for (const { data } of edges) {
-    const targetRole = roles.get(data.target)
-    if (targetRole === 'mule' || targetRole === 'suspect') {
-      sentToSuspicious.set(
-        data.source,
-        (sentToSuspicious.get(data.source) ?? 0) + Number(data.amount),
-      )
-    }
-  }
-  let victimId: string | null = null
-  let victimSent = 0
-  for (const { data } of nodes) {
-    if (!data.own_account || data.suspicion !== 'low' || data.accumulator) continue
-    const sent = sentToSuspicious.get(data.id) ?? 0
-    if (sent > victimSent) {
-      victimSent = sent
-      victimId = data.id
-    }
-  }
-  if (victimId) roles.set(victimId, 'victim')
-  return roles
-}
-
-function buildStylesheet(): cytoscape.StylesheetJson {
-  return [
-    {
-      selector: 'node',
-      style: {
-        label: 'data(label)',
-        'font-size': 11,
-        color: COLORS.label,
-        'text-valign': 'bottom',
-        'text-margin-y': 6,
-        width: 'data(size)',
-        height: 'data(size)',
-        shape: (el: cytoscape.NodeSingular) =>
-          el.data('role') === 'victim' ? 'star' : 'ellipse',
-        'background-color': (el: cytoscape.NodeSingular) =>
-          COLORS[el.data('role') as NodeRole] ?? COLORS.other,
-        'border-width': (el: cytoscape.NodeSingular) => (el.data('own_account') ? 4 : 0),
-        'border-color': COLORS.ownBorder,
-      },
-    },
-    {
-      selector: 'edge',
-      style: {
-        'curve-style': 'bezier',
-        'target-arrow-shape': 'triangle',
-        width: 'data(width)',
-        'line-color': COLORS.edge,
-        'target-arrow-color': COLORS.edge,
-        // 3 evidence tiers, 3 line styles an officer can tell apart at a glance:
-        // solid = confirmed (same UTR both statements), dashed = probable
-        // (amount+time match), dotted = one-sided (only one statement in case)
-        'line-style': (el: cytoscape.EdgeSingular) =>
-          el.data('tier') === 'probable'
-            ? 'dashed'
-            : el.data('tier') === 'external'
-              ? 'dotted'
-              : 'solid',
-      },
-    },
-    {
-      selector: '.loop-highlight',
-      style: {
-        'line-color': COLORS.loop,
-        'target-arrow-color': COLORS.loop,
-        width: 6,
-        'z-index': 10,
-        // marching-ants animation: dash pattern whose offset is advanced on a
-        // timer so the officer literally sees the money travel around the loop
-        'line-style': 'dashed',
-        'line-dash-pattern': [10, 5],
-        label: 'data(hopOrder)',
-        'font-size': 16,
-        'font-weight': 'bold',
-        color: COLORS.loop,
-        'text-background-color': '#ffffff',
-        'text-background-opacity': 1,
-        'text-background-padding': '3px',
-        'text-background-shape': 'roundrectangle',
-      },
-    },
-    {
-      selector: '.loop-node',
-      style: { 'background-color': COLORS.loop },
-    },
-    // Clicked node + its neighbourhood: soft halo glow, green = money coming
-    // in to the clicked account, red = money going out of it.
-    {
-      selector: '.focus-node',
-      style: {
-        'underlay-color': '#2f6fed',
-        'underlay-opacity': 0.3,
-        'underlay-padding': 12,
-      },
-    },
-    {
-      selector: '.neighbor-node',
-      style: {
-        'underlay-color': '#f5a623',
-        'underlay-opacity': 0.35,
-        'underlay-padding': 8,
-      },
-    },
-    {
-      selector: '.neighbor-in',
-      style: {
-        'line-color': '#2fc5a0',
-        'target-arrow-color': '#2fc5a0',
-        width: 4,
-        'z-index': 9,
-      },
-    },
-    {
-      selector: '.neighbor-out',
-      style: {
-        'line-color': '#e5484d',
-        'target-arrow-color': '#e5484d',
-        width: 4,
-        'z-index': 9,
-      },
-    },
-    { selector: '.dimmed', style: { opacity: 0.15 } },
-  ]
-}
-
-/** One neighbouring account and every transfer between it and the clicked node. */
-export interface NodeConnection {
-  account: string
-  totalIn: number
-  totalOut: number
-  transfers: Array<{
-    dir: 'in' | 'out'
-    amount: string
-    when: string
-    tier: EdgeTier
-    channel: string
-    reference: string | null
-  }>
-}
 
 export function FlowGraphPage() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -212,17 +40,17 @@ export function FlowGraphPage() {
     [graph],
   )
 
-  /** Accounts list for the side panel: victim first, then mules, suspects, rest. */
+  /** Accounts list for the side panel, in suspicion order: mules first, then
+   *  suspects, the victim, then everyone else — most suspicious on top. */
   const accountList = useMemo(() => {
     if (!graph) return []
-    const order: Record<NodeRole, number> = { victim: 0, mule: 1, suspect: 2, other: 3 }
     const q = accountQuery.trim().toLowerCase()
     return graph.nodes
       .map((n) => ({ ...n.data, role: roles.get(n.data.id) ?? ('other' as NodeRole) }))
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .sort(
         (a, b) =>
-          order[a.role] - order[b.role] ||
+          SUSPICION_ORDER[a.role] - SUSPICION_ORDER[b.role] ||
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
   }, [graph, roles, accountQuery])
@@ -264,27 +92,10 @@ export function FlowGraphPage() {
   // Mount / rebuild the cytoscape instance whenever graph data changes.
   useEffect(() => {
     if (!graph || !containerRef.current) return
-    const maxThroughput = Math.max(
-      1,
-      ...graph.nodes.map((n) => Number(n.data.inflow) + Number(n.data.outflow)),
-    )
-    const maxAmount = Math.max(1, ...graph.edges.map((e) => Number(e.data.amount)))
     const cy = cytoscape({
       container: containerRef.current,
-      elements: {
-        nodes: graph.nodes.map((n) => ({
-          data: {
-            ...n.data,
-            role: roles.get(n.data.id) ?? 'other',
-            size:
-              28 + 42 * ((Number(n.data.inflow) + Number(n.data.outflow)) / maxThroughput),
-          },
-        })),
-        edges: graph.edges.map((e) => ({
-          data: { ...e.data, width: 1.5 + 4.5 * (Number(e.data.amount) / maxAmount) },
-        })),
-      },
-      style: buildStylesheet(),
+      elements: graphElements(graph.nodes, graph.edges, roles),
+      style: buildGraphStylesheet(),
       layout: {
         name: 'cose',
         animate: false,
@@ -412,6 +223,22 @@ export function FlowGraphPage() {
     )
   }, [graph, selectedNode])
 
+  /** Graph report PDF: full graph image + accounts + round trips; when a node
+   *  is selected, its incoming/outgoing transfers are appended. */
+  const exportGraphPdf = useCallback(() => {
+    downloadGraphReportPdf({
+      caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
+      graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
+      // all accounts, not just the search-filtered list
+      nodes: (graph?.nodes ?? []).map((n) => ({
+        ...n.data,
+        role: roles.get(n.data.id) ?? ('other' as NodeRole),
+      })),
+      roundTrips,
+      focused: selectedNode ? { node: selectedNode, connections } : null,
+    })
+  }, [cases, caseId, graph, roles, roundTrips, selectedNode, connections])
+
   const exportPng = useCallback(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -456,6 +283,9 @@ export function FlowGraphPage() {
               </Button>
               <Button variant="secondary" onClick={exportPng}>
                 Export PNG
+              </Button>
+              <Button variant="secondary" onClick={exportGraphPdf}>
+                ⬇ Download PDF
               </Button>
             </>
           )}
@@ -621,6 +451,7 @@ export function FlowGraphPage() {
             caseId={caseId}
             node={selectedNode}
             connections={connections}
+            onDownloadPdf={exportGraphPdf}
             onClose={() => setSelectedNode(null)}
           />
         )}

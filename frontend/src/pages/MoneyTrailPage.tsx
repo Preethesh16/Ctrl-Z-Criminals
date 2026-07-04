@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useSearchParams } from 'react-router-dom'
 import { Sankey, Tooltip, Layer, Rectangle } from 'recharts'
@@ -6,6 +6,8 @@ import { api } from '../api/client'
 import type { CaseOut, Trail, TrailStopRule, TransactionOut } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { downloadTrailReportPdf, svgToPng } from '../lib/analysisPdf'
+import { deriveRoles, type NodeRole } from '../lib/graphRoles'
 import { formatDateIST, formatINR } from '../lib/format'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
@@ -18,6 +20,37 @@ export function MoneyTrailPage() {
   const [stopRule, setStopRule] = useState<TrailStopRule>('tranche')
   const [trail, setTrail] = useState<Trail | null>(null)
   const [loadingTrail, setLoadingTrail] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const sankeyRef = useRef<HTMLDivElement>(null)
+  const [roles, setRoles] = useState<Map<string, NodeRole>>(new Map())
+
+  // Account roles (mule/suspect/victim) so the trail PDF can label each layer.
+  useEffect(() => {
+    if (!caseId) return
+    setRoles(new Map())
+    api
+      .getGraph(caseId)
+      .then((g) => setRoles(deriveRoles(g.nodes, g.edges)))
+      .catch(() => setRoles(new Map()))
+  }, [caseId])
+
+  async function exportTrailPdf() {
+    if (!trail || !selectedCredit) return
+    setExporting(true)
+    try {
+      const svg = sankeyRef.current?.querySelector('svg') ?? null
+      const sankeyPng = svg ? await svgToPng(svg) : null
+      downloadTrailReportPdf({
+        caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
+        credit: selectedCredit,
+        trail,
+        sankeyPng,
+        roles,
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     api.listCases().then(setCases).catch(() => setCases([]))
@@ -150,6 +183,11 @@ export function MoneyTrailPage() {
                   >
                     Until balance recovers
                   </Button>
+                  {trail && (
+                    <Button variant="secondary" onClick={exportTrailPdf} disabled={exporting}>
+                      {exporting ? 'Preparing…' : '⬇ Download PDF'}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -181,7 +219,9 @@ export function MoneyTrailPage() {
 
                   {trail.hops.length > 0 && (
                     <Card title="Where the money went" className="mb-4 overflow-x-auto">
-                      <TrailSankey trail={trail} />
+                      <div ref={sankeyRef}>
+                        <TrailSankey trail={trail} />
+                      </div>
                     </Card>
                   )}
 
