@@ -90,3 +90,12 @@ def test_glued_drcr_suffix():
     assert parse_amount("11,000.00Cr") == (Decimal("11000.00"), "CREDIT")
     assert parse_amount("1,50,391.44Dr") == (Decimal("150391.44"), "DEBIT")
     assert parse_amount("0.0000CR") == (Decimal("0.00"), "CREDIT")
+
+
+def test_stray_letter_prefix_bleed():
+    """Table-extraction artifact: a wrapped narration fragment ('N' from
+    'NEFT...') bleeds into the adjacent amount cell. Real amount digits
+    must still parse; genuine non-numeric text must still be rejected."""
+    assert parse_amount("N 1.00") == (Decimal("1.00"), None)
+    assert parse_amount("N 9173.00") == (Decimal("9173.00"), None)
+    assert parse_amount("TOTAL") == (None, None)  # not a bare-letter-prefix case

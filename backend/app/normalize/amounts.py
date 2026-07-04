@@ -50,7 +50,15 @@ def parse_amount(value) -> tuple[Decimal | None, str | None]:
 
     s = _CLEAN_RE.sub("", s)
     if not s or not re.fullmatch(r"\d+(\.\d+)?", s):
-        return None, None
+        # Table-extraction artifact: a stray leading letter fragment bled
+        # into the amount cell from an adjacent column (e.g. "N1.00" from
+        # a wrapped "NEFT..." narration). Only strip when what's left is
+        # an unambiguous, complete number — never touch trailing content.
+        stripped = re.sub(r"^[A-Za-z]{1,3}(?=\d)", "", s)
+        if stripped != s and re.fullmatch(r"\d+(\.\d+)?", stripped):
+            s = stripped
+        else:
+            return None, None
     try:
         d = Decimal(s).quantize(Decimal("0.01"))
     except InvalidOperation:
