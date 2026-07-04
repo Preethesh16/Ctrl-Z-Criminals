@@ -89,6 +89,11 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 29: flow graph capped to old-style view; long tail hidden (user decision; NOT PUSHED)
+- User wanted the old 334-account look back and the other ~12k accounts hidden everywhere. Parser revert was the wrong lever (graph reads stored artifacts; reverting A's lane would also undo the accuracy fixes) — explained to user, implemented in the display layer instead: `MAX_NODES = 334`; account list + search now cover ONLY drawn accounts (full-graph search removed); `focusAccount` pruned-account fallback removed; drawer connections restricted to drawn edges; notice reworded to "Showing the N most relevant accounts" (no mention of the pruned tail). Small cases still pass through untouched.
+- Net effect on REALDATA: ~116 connected accounts drawn (334 cap minus edge-budget pruning), old visual format, ~20s load, no errors. Backend untouched; A's uncommitted local flowgraph.py edit left as-is. Committed locally only.
+
+
 ### 2026-07-05 — Session 28: flow graph fixed for giant cases (NOT PUSHED per user)
 - User: flow graph stopped loading on `CEN/REALDATA/2026`. Diagnosis: a re-analysis regenerated the graph artifact at **12,193 nodes / 110,891 edges (28 MB)** (user's working screenshot was from an older 334-account run) — cytoscape+cose froze the tab.
 - Fix (`FlowGraphPage.tsx` only): `displayGraph` useMemo caps rendering above 400 nodes / 1,500 edges — keeps statements + suspicious accounts first, then busiest counterparties; edges ranked confirmed > probable > external by amount with **max 2 parallel edges per account pair** (hubs were eating the budget → hairball); isolated survivors dropped; truncated layout gets `idealEdgeLength/nodeOverlap` stretch. Roles still derived from the FULL graph; search covers the full 12k accounts (list display capped 250; clicking a pruned account still opens its drawer via full-graph data); PDF/Excel use drawn subset; notice line explains what's shown. Small cases pass through 100% untouched.

@@ -55,7 +55,7 @@ export function FlowGraphPage() {
    * derived from the FULL graph above, so classifications stay correct.
    * Small cases pass through untouched.
    */
-  const MAX_NODES = 400
+  const MAX_NODES = 334
   const MAX_EDGES = 1500
   const { displayGraph, truncated } = useMemo(() => {
     if (!graph) return { displayGraph: null, truncated: false }
@@ -103,10 +103,9 @@ export function FlowGraphPage() {
   const accountList = useMemo(() => {
     if (!displayGraph) return []
     const q = accountQuery.trim().toLowerCase()
-    // Search covers the FULL graph so any account stays findable; without a
-    // query, list what is drawn.
-    const source = q && graph ? graph.nodes : displayGraph.nodes
-    return source
+    // List and search cover ONLY the drawn accounts (user decision: the
+    // pruned long tail of counterparties stays out of the UI entirely).
+    return displayGraph.nodes
       .map((n) => ({ ...n.data, role: roles.get(n.data.id) ?? ('other' as NodeRole) }))
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .sort(
@@ -115,7 +114,7 @@ export function FlowGraphPage() {
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
       .slice(0, 250)
-  }, [displayGraph, graph, roles, accountQuery])
+  }, [displayGraph, roles, accountQuery])
 
   /** Largest single transfer in the graph — the slider's upper bound. */
   const maxEdgeAmount = useMemo(
@@ -195,24 +194,15 @@ export function FlowGraphPage() {
   }, [minAmount, channelFilter, graph])
 
   /** Same effect as tapping the node on the canvas, plus centre the graph on it. */
-  const focusAccount = useCallback(
-    (id: string) => {
-      const cy = cyRef.current
-      if (!cy) return
-      const el = cy.getElementById(id)
-      setSelectedEdge(null)
-      if (el.nonempty()) {
-        setSelectedNode(el.data() as GraphNodeData)
-        cy.animate({ center: { eles: el } }, { duration: 250 })
-      } else {
-        // Account found via search but pruned from the drawn subset on a
-        // giant case — still open its drawer (connections use the full graph).
-        const data = graph?.nodes.find((n) => n.data.id === id)?.data
-        if (data) setSelectedNode(data)
-      }
-    },
-    [graph],
-  )
+  const focusAccount = useCallback((id: string) => {
+    const cy = cyRef.current
+    if (!cy) return
+    const el = cy.getElementById(id)
+    if (el.empty()) return
+    setSelectedEdge(null)
+    setSelectedNode(el.data() as GraphNodeData)
+    cy.animate({ center: { eles: el } }, { duration: 250 })
+  }, [])
 
   useEffect(() => {
     api.listCases().then(setCases).catch(() => setCases([]))
@@ -370,9 +360,9 @@ export function FlowGraphPage() {
   // Neighbouring accounts of the clicked node, with every transfer — feeds
   // the "Connected accounts" section of the node drawer.
   const connections = useMemo<NodeConnection[]>(() => {
-    if (!graph || !selectedNode) return []
+    if (!displayGraph || !selectedNode) return []
     const byAccount = new Map<string, NodeConnection>()
-    for (const { data } of graph.edges) {
+    for (const { data } of displayGraph.edges) {
       let dir: 'in' | 'out'
       let other: string
       if (data.source === selectedNode.id) {
@@ -401,7 +391,7 @@ export function FlowGraphPage() {
     return [...byAccount.values()].sort(
       (a, b) => b.totalIn + b.totalOut - (a.totalIn + a.totalOut),
     )
-  }, [graph, selectedNode])
+  }, [displayGraph, selectedNode])
 
   /** Graph report (PDF or Excel): accounts + round trips; when a node is
    *  selected, its incoming/outgoing transfers are appended. */
@@ -502,13 +492,10 @@ export function FlowGraphPage() {
         <p className="text-body text-text-secondary">Loading the money-flow graph…</p>
       )}
 
-      {truncated && graph && displayGraph && (
+      {truncated && displayGraph && (
         <p className="text-label text-text-secondary mb-2">
-          Very large case: drawing the {displayGraph.nodes.length} most relevant accounts (of{' '}
-          {graph.nodes.length.toLocaleString('en-IN')}) and their{' '}
-          {displayGraph.edges.length.toLocaleString('en-IN')} biggest transfers — statements,
-          suspicious accounts and top counterparties first. Use the search box to find any other
-          account.
+          Showing the {displayGraph.nodes.length} most relevant accounts — statements and
+          suspicious accounts first, then the biggest counterparties.
         </p>
       )}
       <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
