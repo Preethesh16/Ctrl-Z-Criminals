@@ -205,6 +205,38 @@ export function FlowGraphPage() {
   const [activeLoop, setActiveLoop] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphEdgeData | null>(null)
+  const [accountQuery, setAccountQuery] = useState('')
+
+  const roles = useMemo(
+    () => (graph ? deriveRoles(graph.nodes, graph.edges) : new Map<string, NodeRole>()),
+    [graph],
+  )
+
+  /** Accounts list for the side panel: victim first, then mules, suspects, rest. */
+  const accountList = useMemo(() => {
+    if (!graph) return []
+    const order: Record<NodeRole, number> = { victim: 0, mule: 1, suspect: 2, other: 3 }
+    const q = accountQuery.trim().toLowerCase()
+    return graph.nodes
+      .map((n) => ({ ...n.data, role: roles.get(n.data.id) ?? ('other' as NodeRole) }))
+      .filter((n) => !q || n.label.toLowerCase().includes(q))
+      .sort(
+        (a, b) =>
+          order[a.role] - order[b.role] ||
+          Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
+      )
+  }, [graph, roles, accountQuery])
+
+  /** Same effect as tapping the node on the canvas, plus centre the graph on it. */
+  const focusAccount = useCallback((id: string) => {
+    const cy = cyRef.current
+    if (!cy) return
+    const el = cy.getElementById(id)
+    if (el.empty()) return
+    setSelectedEdge(null)
+    setSelectedNode(el.data() as GraphNodeData)
+    cy.animate({ center: { eles: el } }, { duration: 250 })
+  }, [])
 
   useEffect(() => {
     api.listCases().then(setCases).catch(() => setCases([]))
@@ -237,7 +269,6 @@ export function FlowGraphPage() {
       ...graph.nodes.map((n) => Number(n.data.inflow) + Number(n.data.outflow)),
     )
     const maxAmount = Math.max(1, ...graph.edges.map((e) => Number(e.data.amount)))
-    const roles = deriveRoles(graph.nodes, graph.edges)
     const cy = cytoscape({
       container: containerRef.current,
       elements: {
@@ -284,7 +315,7 @@ export function FlowGraphPage() {
       cy.destroy()
       cyRef.current = null
     }
-  }, [graph])
+  }, [graph, roles])
 
   // Highlighting: clicked-node neighbourhood glow takes priority, then
   // round-trip loops with the "money travelling" animation.
@@ -480,8 +511,60 @@ export function FlowGraphPage() {
           </div>
         </div>
 
-        {roundTrips.length > 0 && (
-          <aside className="w-80 shrink-0 max-h-[560px] overflow-y-auto">
+        <aside className="w-80 shrink-0 max-h-[560px] overflow-y-auto">
+          <h2 className="text-card-title text-text-primary mb-2">
+            All accounts ({accountList.length})
+          </h2>
+          <input
+            type="search"
+            value={accountQuery}
+            onChange={(e) => setAccountQuery(e.target.value)}
+            placeholder="Search account or name…"
+            className="w-full rounded-control border border-border bg-surface px-3 py-2 text-body mb-2"
+          />
+          <ul className="flex flex-col mb-4 card !p-0 divide-y divide-border max-h-64 overflow-y-auto">
+            {accountList.map((n) => {
+              const isSelected = selectedNode?.id === n.id
+              return (
+                <li key={n.id}>
+                  <button
+                    onClick={() => focusAccount(n.id)}
+                    className={`w-full text-left px-3 py-2 hover:bg-background transition-colors ${
+                      isSelected ? 'bg-primary-soft' : ''
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {n.role === 'victim' ? (
+                        <span className="text-primary shrink-0">★</span>
+                      ) : (
+                        <span
+                          className={`inline-block w-2.5 h-2.5 rounded-pill shrink-0 ${
+                            n.role === 'mule'
+                              ? 'bg-danger'
+                              : n.role === 'suspect'
+                                ? 'bg-warning'
+                                : 'bg-border'
+                          }`}
+                        />
+                      )}
+                      <span className="text-body text-text-primary truncate">
+                        {n.label.replace('ext:', '')}
+                      </span>
+                    </span>
+                    <span className="block text-label text-text-secondary pl-[18px]">
+                      in {formatINR(n.inflow)} · out {formatINR(n.outflow)} · {n.txn_count} txns
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+            {accountList.length === 0 && (
+              <li className="px-3 py-2 text-label text-text-secondary">No account matches.</li>
+            )}
+          </ul>
+
+          {roundTrips.length > 0 && (
+            <>
             <h2 className="text-card-title text-text-primary mb-2">
               Round trips found ({roundTrips.length})
             </h2>
@@ -527,8 +610,9 @@ export function FlowGraphPage() {
                 </Card>
               )
             })}
-          </aside>
-        )}
+            </>
+          )}
+        </aside>
       </div>
 
       <AnimatePresence>

@@ -89,6 +89,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 19: "All accounts" panel on Flow Graph
+- Side column now opens with a searchable **All accounts (N)** list (role icon ★/red/amber/grey + in/out totals + txn count; sorted victim → mule → suspect → other, then by volume). Clicking a row = identical effect to tapping the node on canvas (`focusAccount` → setSelectedNode + `cy.animate(center)`): neighbourhood glow, green-in/red-out edges, drawer with Connected accounts. `deriveRoles` result lifted to a component-level `useMemo` shared by the canvas mount and the list.
+- Round-trips section moved below the accounts list in the same aside (aside now always renders with the graph).
+- Also this session (pre-feature): **local purge of leaked tempData objects** after the team's history rewrite — `git remote prune origin` + `reflog expire --expire=now --all` + `gc --prune=now`; verified commit 3db84b3 and both blobs unrecoverable locally; work backed up to `Hacathon/tracenet-backup-2026-07-04.tar.gz` (excludes dataset). Rebased session-18 commit onto rewritten history (`--onto`), realigned local main.
+- Verified headless: list renders sorted, list-click focuses + glows mule2 with correct drawer, search filter works. Build + lint clean; Docker web rebuilt.
+
+
 ### 2026-07-04 — Session 18: node-click neighbourhood glow + connected-accounts drawer section
 - Click any graph node → blue halo on it, amber glow on every neighbour, incoming edges green / outgoing red, everything else dimmed (cytoscape `closedNeighborhood()` + `underlay-*` styles). Node focus takes priority over loop highlighting; both share one effect so classes never fight.
 - NodeDrawer gains "Connected accounts (N)": per-neighbour card (grouped from `graph.edges`, sorted by total volume) with ← received / → sent totals and each transfer's amount, date, channel, and tier tag (confirmed/probable/one-sided). Prop is optional so Dashboard's NodeDrawer usage (if any) is unaffected.
