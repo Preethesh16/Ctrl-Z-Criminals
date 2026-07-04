@@ -180,6 +180,76 @@ def _tables_packed_unexplodable(tables) -> bool:
     return False
 
 
+# UCO Bank statements: overlapping letterhead corrupts the header
+# ("WITHDRAW" is readable but the debit/deposit columns never align
+# cleanly), and the transaction AMOUNT wraps onto its own bare
+# continuation line while the running BALANCE stays on the date line
+# ("19-05-2025 BY CASH 5500.00 CR" / next line: "5500.00"). Rather than
+# guess which of two ambiguous numbers is the amount, derive it from the
+# balance delta between consecutive rows — the balance is reliably
+# present on every transaction line, the wrapped amount is not always.
+_UCO_FINGERPRINT = "WITHDRAW DEPOSITS BALANCE"
+_UCO_LINE = re.compile(
+    r"^(?P<date>\d{1,2}-\d{1,2}-\d{4})\s+(?P<body>.+?)\s+"
+    r"(?P<bal>-?[\d,]+\.\d{2})\s*(?:CR|DR)\s*$"
+)
+_UCO_OPENING = re.compile(
+    r"^Opening Balance as of \d{1,2}-\d{1,2}-\d{4}\s+(?P<bal>-?[\d,]+\.\d{2})\s*(?:CR|DR)\s*$",
+    re.IGNORECASE,
+)
+_BARE_AMOUNT = re.compile(r"^-?[\d,]+\.\d{2}$")
+
+
+def is_uco_style(text: str) -> bool:
+    return _UCO_FINGERPRINT in text.upper().replace("\n", " ")
+
+
+def read_uco_style_lines(full_text: str) -> list[list]:
+    """Balance-anchored extraction for the UCO Bank overlapping-letterhead
+    layout. Amount is DERIVED from the balance delta, not read directly —
+    so FD-07 balance-checks on these rows verify balances only (which are
+    read independently), not amounts. Cross-check against the statement's
+    own printed GRAND TOTAL / closing balance line separately."""
+    from ..normalize.amounts import parse_amount
+
+    rows: list[tuple[str, str, "Decimal"]] = []  # (date, narration, balance)
+    opening_bal = None
+    pending_narration: list[str] = []
+    for line in full_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if opening_bal is None:
+            m_open = _UCO_OPENING.match(stripped)
+            if m_open:
+                opening_bal, _ = parse_amount(m_open.group("bal"))
+                continue
+        m = _UCO_LINE.match(stripped)
+        if m:
+            bal, _ = parse_amount(m.group("bal"))
+            narr = " ".join([*pending_narration, m.group("body")]).strip()
+            rows.append((m.group("date"), narr, bal))
+            pending_narration = []
+        elif _BARE_AMOUNT.match(stripped):
+            continue  # wrapped amount — superseded by the balance-delta derivation
+        elif rows and len(stripped) < 80:
+            pending_narration.append(stripped)  # wrapped narration fragment
+
+    grid: list[list] = []
+    prev_bal = opening_bal  # genuine 0.00-style opening line, not the first real txn
+    for date, narr, bal in rows:
+        if prev_bal is None:  # no opening-balance line found — fall back to seeding
+            prev_bal = bal
+            continue
+        delta = bal - prev_bal
+        if delta != 0:
+            debit = str(abs(delta)) if delta < 0 else None
+            credit = str(delta) if delta > 0 else None
+            grid.append([date, narr, debit, credit, str(bal)])
+        prev_bal = bal
+    return grid
+
+
 def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
     """Extract a unified cell grid from all pages; returns (grid, header_meta).
 
@@ -192,6 +262,15 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
     full_text_head = ""
     packed = False
     with pdfplumber.open(path) as pdf:
+        if is_uco_style(pdf.pages[0].extract_text() or ""):
+            full_text_head = pdf.pages[0].extract_text() or ""
+            # one continuous stream, not per-page — a page break must never
+            # reset the running-balance chain (that silently drops the
+            # first transaction after every page boundary)
+            all_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+            grid.extend(read_uco_style_lines(all_text))
+            return grid, extract_header_meta(full_text_head)
+
         for pageno, page in enumerate(pdf.pages):
             if pageno == 0:
                 full_text_head = page.extract_text() or ""

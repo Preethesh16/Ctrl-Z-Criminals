@@ -129,3 +129,34 @@ def test_packed_unexplodable_tables_detected():
         "19.00\n0.00\n5.00",
     ]]
     assert not _tables_packed_unexplodable([aligned])
+
+
+def test_uco_bank_balance_delta_extraction():
+    """UCO Bank: overlapping letterhead corrupts the debit/credit columns,
+    amount wraps onto its own bare line, but balance is reliable on every
+    date line. Amount must be derived from the balance delta, and a page
+    break must NOT reset the running balance (that used to silently drop
+    the first transaction after every page)."""
+    from app.ingest.pdf_digital import is_uco_style, read_uco_style_lines
+
+    fingerprint_text = "DATE PARTICULARS CHQ.NO. WITHDRAW DEPOSITS BALANCE\nALS\n"
+    assert is_uco_style(fingerprint_text)
+    assert not is_uco_style("DATE PARTICULARS DEBIT CREDIT BALANCE")
+
+    page1 = (
+        "Opening Balance as of 19-05-2025 0.00 CR\n"
+        "19-05-2025 BY CASH 5500.00 CR\n"
+        "5500.00\n"
+        "19-05-2025 APY:052025 5410.00 CR\n"
+        "90.00\n"
+    )
+    page2 = (  # simulates a page break — must continue the SAME balance chain
+        "19-05-2025 CGST For CHG 5320.00 CR\n"
+        "90.00\n"
+    )
+    grid = read_uco_style_lines(page1 + page2)
+    assert len(grid) == 3
+    assert grid[0][3] == "5500.00" and grid[0][2] is None  # credit (deposit)
+    assert grid[1][2] == "90.00" and grid[1][3] is None  # debit (withdrawal)
+    assert grid[2][2] == "90.00"  # page-break row still derived correctly
+    assert [row[4] for row in grid] == ["5500.00", "5410.00", "5320.00"]
