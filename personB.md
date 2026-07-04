@@ -89,10 +89,11 @@
 
 ## Session log (newest first)
 
-### 2026-07-05 — Session 28: zero-transaction files count as unreadable (user-found gap)
-- User tested with a dummy photo: OCR "succeeded" with 0 transactions → document status `parsed`, so the Session-27 filter (status==='failed') missed it. Fix in `FailedStatements.tsx`: `isUnreadable()` = status failed OR (settled AND `txn_count === 0`), plus a plain-English reason ("file was read but no transactions were found — may not be a bank statement / photo too unclear").
-- Verified on the user's real `CEN/Dummy/2026` case (:3000): both dummy jpgs (parsed, 0 txns) now show as "Not read" with re-upload + manual-fix actions. Docker web rebuilt; pushed.
-- ⚠️ Parallel-session note: local commit `cf98ed6` (fast tier-2 matcher in `backend/app/detection/flowgraph.py`) + an uncommitted partial revert of that file exist from another session working on REALDATA analysis speed — left untouched, not part of this commit.
+### 2026-07-05 — Session 28: flow graph fixed for giant cases (NOT PUSHED per user)
+- User: flow graph stopped loading on `CEN/REALDATA/2026`. Diagnosis: a re-analysis regenerated the graph artifact at **12,193 nodes / 110,891 edges (28 MB)** (user's working screenshot was from an older 334-account run) — cytoscape+cose froze the tab.
+- Fix (`FlowGraphPage.tsx` only): `displayGraph` useMemo caps rendering above 400 nodes / 1,500 edges — keeps statements + suspicious accounts first, then busiest counterparties; edges ranked confirmed > probable > external by amount with **max 2 parallel edges per account pair** (hubs were eating the budget → hairball); isolated survivors dropped; truncated layout gets `idealEdgeLength/nodeOverlap` stretch. Roles still derived from the FULL graph; search covers the full 12k accounts (list display capped 250; clicking a pruned account still opens its drawer via full-graph data); PDF/Excel use drawn subset; notice line explains what's shown. Small cases pass through 100% untouched.
+- Verified on :3000 REALDATA: notice at 4.5s, full render ~20s, no page errors, 116 connected accounts drawn, 172 round trips listed. Build + lint clean; Docker web rebuilt locally. **Committed locally only — user said don't push.**
+
 
 ### 2026-07-05 — Session 27: failed statements surfaced in Review step (re-upload / manual fix)
 - New `components/FailedStatements.tsx`, rendered at the top of the wizard Review step (also in the zero-transactions branch so all-failed cases still show it): lists case documents with `status === 'failed'`, plain-English reason (password / unsupported / unrecognized layout / raw error), and two actions per statement — **"⬆ Re-upload corrected file"** (hidden file input → `uploadDocument` → poll job → success/failure notice incl. 409 same-file guidance → refresh) and **"✎ Fix columns manually"** (existing `ColumnMappingModal`; template-saved and re-parse-job paths both handled).

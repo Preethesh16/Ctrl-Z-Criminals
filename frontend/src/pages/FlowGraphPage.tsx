@@ -47,12 +47,66 @@ export function FlowGraphPage() {
     [graph],
   )
 
+  /**
+   * Giant batch cases (10k+ accounts) freeze the browser if drawn whole.
+   * Above the caps, render only the most relevant subset: every account with
+   * a statement or a suspicion first, then the busiest counterparties; edges
+   * keep confirmed > probable > external, biggest amounts first. Roles are
+   * derived from the FULL graph above, so classifications stay correct.
+   * Small cases pass through untouched.
+   */
+  const MAX_NODES = 400
+  const MAX_EDGES = 1500
+  const { displayGraph, truncated } = useMemo(() => {
+    if (!graph) return { displayGraph: null, truncated: false }
+    if (graph.nodes.length <= MAX_NODES && graph.edges.length <= MAX_EDGES)
+      return { displayGraph: graph, truncated: false }
+
+    const throughput = (n: { data: GraphNodeData }) =>
+      Number(n.data.inflow) + Number(n.data.outflow)
+    const priority = [...graph.nodes].sort((a, b) => {
+      const aKeep = a.data.own_account || a.data.suspicion !== 'low' ? 1 : 0
+      const bKeep = b.data.own_account || b.data.suspicion !== 'low' ? 1 : 0
+      return bKeep - aKeep || throughput(b) - throughput(a)
+    })
+    const kept = new Set(priority.slice(0, MAX_NODES).map((n) => n.data.id))
+
+    const tierRank = { confirmed: 0, probable: 1, external: 2 } as const
+    // Cap parallel edges per account pair (hubs can have 100s) so the edge
+    // budget spreads across many accounts instead of a few thick bundles.
+    const perPair = new Map<string, number>()
+    const edges = graph.edges
+      .filter((e) => kept.has(e.data.source) && kept.has(e.data.target))
+      .sort(
+        (a, b) =>
+          tierRank[a.data.tier] - tierRank[b.data.tier] ||
+          Number(b.data.amount) - Number(a.data.amount),
+      )
+      .filter((e) => {
+        const pair = `${e.data.source}→${e.data.target}`
+        const seen = perPair.get(pair) ?? 0
+        if (seen >= 2) return false
+        perPair.set(pair, seen + 1)
+        return true
+      })
+      .slice(0, MAX_EDGES)
+    // Drop kept nodes that ended up with no visible edges (isolated dots).
+    const connected = new Set(edges.flatMap((e) => [e.data.source, e.data.target]))
+    const nodes = graph.nodes.filter(
+      (n) => connected.has(n.data.id) || (kept.has(n.data.id) && n.data.own_account),
+    )
+    return { displayGraph: { nodes, edges }, truncated: true }
+  }, [graph])
+
   /** Accounts list for the side panel, in suspicion order: mules first, then
    *  suspects, the victim, then everyone else — most suspicious on top. */
   const accountList = useMemo(() => {
-    if (!graph) return []
+    if (!displayGraph) return []
     const q = accountQuery.trim().toLowerCase()
-    return graph.nodes
+    // Search covers the FULL graph so any account stays findable; without a
+    // query, list what is drawn.
+    const source = q && graph ? graph.nodes : displayGraph.nodes
+    return source
       .map((n) => ({ ...n.data, role: roles.get(n.data.id) ?? ('other' as NodeRole) }))
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .sort(
@@ -60,18 +114,19 @@ export function FlowGraphPage() {
           SUSPICION_ORDER[a.role] - SUSPICION_ORDER[b.role] ||
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
-  }, [graph, roles, accountQuery])
+      .slice(0, 250)
+  }, [displayGraph, graph, roles, accountQuery])
 
   /** Largest single transfer in the graph — the slider's upper bound. */
   const maxEdgeAmount = useMemo(
-    () => Math.max(0, ...(graph?.edges ?? []).map((e) => Number(e.data.amount))),
-    [graph],
+    () => Math.max(0, ...(displayGraph?.edges ?? []).map((e) => Number(e.data.amount))),
+    [displayGraph],
   )
 
   /** Distinct transaction types present in this case's transfers. */
   const channelOptions = useMemo(
-    () => [...new Set((graph?.edges ?? []).map((e) => e.data.channel))].sort(),
-    [graph],
+    () => [...new Set((displayGraph?.edges ?? []).map((e) => e.data.channel))].sort(),
+    [displayGraph],
   )
 
   // Reset the add-on filters whenever a different case's graph loads.
@@ -140,15 +195,24 @@ export function FlowGraphPage() {
   }, [minAmount, channelFilter, graph])
 
   /** Same effect as tapping the node on the canvas, plus centre the graph on it. */
-  const focusAccount = useCallback((id: string) => {
-    const cy = cyRef.current
-    if (!cy) return
-    const el = cy.getElementById(id)
-    if (el.empty()) return
-    setSelectedEdge(null)
-    setSelectedNode(el.data() as GraphNodeData)
-    cy.animate({ center: { eles: el } }, { duration: 250 })
-  }, [])
+  const focusAccount = useCallback(
+    (id: string) => {
+      const cy = cyRef.current
+      if (!cy) return
+      const el = cy.getElementById(id)
+      setSelectedEdge(null)
+      if (el.nonempty()) {
+        setSelectedNode(el.data() as GraphNodeData)
+        cy.animate({ center: { eles: el } }, { duration: 250 })
+      } else {
+        // Account found via search but pruned from the drawn subset on a
+        // giant case — still open its drawer (connections use the full graph).
+        const data = graph?.nodes.find((n) => n.data.id === id)?.data
+        if (data) setSelectedNode(data)
+      }
+    },
+    [graph],
+  )
 
   useEffect(() => {
     api.listCases().then(setCases).catch(() => setCases([]))
@@ -175,10 +239,10 @@ export function FlowGraphPage() {
 
   // Mount / rebuild the cytoscape instance whenever graph data changes.
   useEffect(() => {
-    if (!graph || !containerRef.current) return
+    if (!displayGraph || !containerRef.current) return
     const cy = cytoscape({
       container: containerRef.current,
-      elements: graphElements(graph.nodes, graph.edges, roles),
+      elements: graphElements(displayGraph.nodes, displayGraph.edges, roles),
       style: buildGraphStylesheet(),
       layout: {
         name: 'cose',
@@ -187,6 +251,8 @@ export function FlowGraphPage() {
         // Keep labels of small/disconnected nodes from overlapping each other.
         nodeDimensionsIncludeLabels: true,
         componentSpacing: 120,
+        // Truncated giant cases pack densely — stretch them out a bit.
+        ...(truncated ? { idealEdgeLength: 100, nodeOverlap: 12 } : {}),
       } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.2,
     })
@@ -210,7 +276,7 @@ export function FlowGraphPage() {
       cy.destroy()
       cyRef.current = null
     }
-  }, [graph, roles])
+  }, [displayGraph, truncated, roles])
 
   // Highlighting: clicked-node neighbourhood glow takes priority, then
   // round-trip loops with the "money travelling" animation.
@@ -343,8 +409,9 @@ export function FlowGraphPage() {
     (format: 'pdf' | 'excel') => {
       const common = {
         caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
-        // all accounts, not just the search-filtered list
-        nodes: (graph?.nodes ?? []).map((n) => ({
+        // the drawn accounts (display-capped on giant cases), not the
+        // search-filtered list — autotable cannot take 12k rows either
+        nodes: (displayGraph?.nodes ?? []).map((n) => ({
           ...n.data,
           role: roles.get(n.data.id) ?? ('other' as NodeRole),
         })),
@@ -360,7 +427,7 @@ export function FlowGraphPage() {
         downloadGraphReportXlsx(common)
       }
     },
-    [cases, caseId, graph, roles, roundTrips, selectedNode, connections],
+    [cases, caseId, displayGraph, roles, roundTrips, selectedNode, connections],
   )
 
   const exportPng = useCallback(() => {
@@ -435,6 +502,15 @@ export function FlowGraphPage() {
         <p className="text-body text-text-secondary">Loading the money-flow graph…</p>
       )}
 
+      {truncated && graph && displayGraph && (
+        <p className="text-label text-text-secondary mb-2">
+          Very large case: drawing the {displayGraph.nodes.length} most relevant accounts (of{' '}
+          {graph.nodes.length.toLocaleString('en-IN')}) and their{' '}
+          {displayGraph.edges.length.toLocaleString('en-IN')} biggest transfers — statements,
+          suspicious accounts and top counterparties first. Use the search box to find any other
+          account.
+        </p>
+      )}
       <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
         <div className="flex-1 min-w-0">
           <div className="relative">
