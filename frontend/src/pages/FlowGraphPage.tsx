@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useSearchParams } from 'react-router-dom'
 import cytoscape from 'cytoscape'
@@ -7,6 +7,7 @@ import { api } from '../api/client'
 import type {
   CaseGraph,
   CaseOut,
+  EdgeTier,
   GraphEdgeData,
   GraphNodeData,
   RoundTrip,
@@ -136,8 +137,59 @@ function buildStylesheet(): cytoscape.StylesheetJson {
       selector: '.loop-node',
       style: { 'background-color': COLORS.loop },
     },
+    // Clicked node + its neighbourhood: soft halo glow, green = money coming
+    // in to the clicked account, red = money going out of it.
+    {
+      selector: '.focus-node',
+      style: {
+        'underlay-color': '#2f6fed',
+        'underlay-opacity': 0.3,
+        'underlay-padding': 12,
+      },
+    },
+    {
+      selector: '.neighbor-node',
+      style: {
+        'underlay-color': '#f5a623',
+        'underlay-opacity': 0.35,
+        'underlay-padding': 8,
+      },
+    },
+    {
+      selector: '.neighbor-in',
+      style: {
+        'line-color': '#2fc5a0',
+        'target-arrow-color': '#2fc5a0',
+        width: 4,
+        'z-index': 9,
+      },
+    },
+    {
+      selector: '.neighbor-out',
+      style: {
+        'line-color': '#e5484d',
+        'target-arrow-color': '#e5484d',
+        width: 4,
+        'z-index': 9,
+      },
+    },
     { selector: '.dimmed', style: { opacity: 0.15 } },
   ]
+}
+
+/** One neighbouring account and every transfer between it and the clicked node. */
+export interface NodeConnection {
+  account: string
+  totalIn: number
+  totalOut: number
+  transfers: Array<{
+    dir: 'in' | 'out'
+    amount: string
+    when: string
+    tier: EdgeTier
+    channel: string
+    reference: string | null
+  }>
 }
 
 export function FlowGraphPage() {
@@ -227,18 +279,37 @@ export function FlowGraphPage() {
       }
     })
     cyRef.current = cy
+    if (import.meta.env.DEV) (window as unknown as { __cy?: Core }).__cy = cy
     return () => {
       cy.destroy()
       cyRef.current = null
     }
   }, [graph])
 
-  // Round-trip highlighting + "money travelling" animation.
+  // Highlighting: clicked-node neighbourhood glow takes priority, then
+  // round-trip loops with the "money travelling" animation.
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
-    cy.elements().removeClass('loop-highlight loop-node dimmed')
+    cy.elements().removeClass(
+      'loop-highlight loop-node dimmed focus-node neighbor-node neighbor-in neighbor-out',
+    )
     cy.edges().data('hopOrder', '')
+
+    if (selectedNode) {
+      const node = cy.getElementById(selectedNode.id)
+      if (node.nonempty()) {
+        const hood = node.closedNeighborhood()
+        cy.elements().not(hood).addClass('dimmed')
+        node.addClass('focus-node')
+        hood.nodes().not(node).addClass('neighbor-node')
+        node.connectedEdges().forEach((e) => {
+          e.addClass(e.data('target') === selectedNode.id ? 'neighbor-in' : 'neighbor-out')
+        })
+      }
+      return
+    }
+
     if (!activeLoop || roundTrips.length === 0) return
     const loops =
       activeLoop === 'all' ? roundTrips : roundTrips.filter((lp) => lp.loop_id === activeLoop)
@@ -272,7 +343,43 @@ export function FlowGraphPage() {
       highlighted.forEach((e) => e.style('line-dash-offset', offset))
     }, 80)
     return () => window.clearInterval(timer)
-  }, [activeLoop, roundTrips, graph])
+  }, [activeLoop, selectedNode, roundTrips, graph])
+
+  // Neighbouring accounts of the clicked node, with every transfer — feeds
+  // the "Connected accounts" section of the node drawer.
+  const connections = useMemo<NodeConnection[]>(() => {
+    if (!graph || !selectedNode) return []
+    const byAccount = new Map<string, NodeConnection>()
+    for (const { data } of graph.edges) {
+      let dir: 'in' | 'out'
+      let other: string
+      if (data.source === selectedNode.id) {
+        dir = 'out'
+        other = data.target
+      } else if (data.target === selectedNode.id) {
+        dir = 'in'
+        other = data.source
+      } else {
+        continue
+      }
+      const entry =
+        byAccount.get(other) ?? { account: other, totalIn: 0, totalOut: 0, transfers: [] }
+      if (dir === 'in') entry.totalIn += Number(data.amount)
+      else entry.totalOut += Number(data.amount)
+      entry.transfers.push({
+        dir,
+        amount: data.amount,
+        when: data.when,
+        tier: data.tier,
+        channel: data.channel,
+        reference: data.reference,
+      })
+      byAccount.set(other, entry)
+    }
+    return [...byAccount.values()].sort(
+      (a, b) => b.totalIn + b.totalOut - (a.totalIn + a.totalOut),
+    )
+  }, [graph, selectedNode])
 
   const exportPng = useCallback(() => {
     const cy = cyRef.current
@@ -426,7 +533,12 @@ export function FlowGraphPage() {
 
       <AnimatePresence>
         {selectedNode && caseId && (
-          <NodeDrawer caseId={caseId} node={selectedNode} onClose={() => setSelectedNode(null)} />
+          <NodeDrawer
+            caseId={caseId}
+            node={selectedNode}
+            connections={connections}
+            onClose={() => setSelectedNode(null)}
+          />
         )}
         {selectedEdge && (
           <EdgeDrawer edge={selectedEdge} onClose={() => setSelectedEdge(null)} />

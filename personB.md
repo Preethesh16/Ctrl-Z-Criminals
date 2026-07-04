@@ -89,6 +89,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 18: node-click neighbourhood glow + connected-accounts drawer section
+- Click any graph node → blue halo on it, amber glow on every neighbour, incoming edges green / outgoing red, everything else dimmed (cytoscape `closedNeighborhood()` + `underlay-*` styles). Node focus takes priority over loop highlighting; both share one effect so classes never fight.
+- NodeDrawer gains "Connected accounts (N)": per-neighbour card (grouped from `graph.edges`, sorted by total volume) with ← received / → sent totals and each transfer's amount, date, channel, and tier tag (confirmed/probable/one-sided). Prop is optional so Dashboard's NodeDrawer usage (if any) is unaffected.
+- Dev-only test hook: `window.__cy` exposed under `import.meta.env.DEV` (headless canvas clicks are flaky; tests emit `tap` via the hook).
+- Verified headless on mock case (screenshot: mule1 focused → victim/mule2/mule3 glow, drawer lists 3 connections with correct directions). Build + lint clean; Docker web rebuilt.
+
+
 ### 2026-07-04 — Session 17: officer-friendly round-trip visualization
 - User request: make round-tripping understandable to a low-level officer, with the 3 edge evidence tiers distinct and a separate round-trip column.
 - **3 edge styles**: solid = confirmed (same UTR both statements), dashed = probable (amount+time), dotted = one-sided/`external` (only one statement in case). `EdgeTier` type + EdgeDrawer wording + mock external edge (e7) added — backend already emitted `external`, the UI had been rendering it as solid (real gap, now fixed).

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { api, ApiError } from '../api/client'
 import type { Disposition, GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
+import type { NodeConnection } from '../pages/FlowGraphPage'
 import { explainFlag, flagLabel } from '../lib/flagExplanations'
 import { formatDateIST, formatINR } from '../lib/format'
 import { DispositionDonut } from '../pages/DashboardPage'
@@ -48,10 +49,12 @@ const ROLE_TAGS: Record<string, { label: string; className: string }> = {
 export function NodeDrawer({
   caseId,
   node,
+  connections = [],
   onClose,
 }: {
   caseId: string
   node: GraphNodeData & { role?: string }
+  connections?: NodeConnection[]
   onClose: () => void
 }) {
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null)
@@ -116,6 +119,64 @@ export function NodeDrawer({
         <div className="mb-6">
           <h3 className="text-card-title text-text-primary mb-2">Where this account's money went</h3>
           <DispositionDonut disposition={disposition} size={160} />
+        </div>
+      )}
+
+      {connections.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-card-title text-text-primary mb-1">
+            Connected accounts ({connections.length})
+          </h3>
+          <p className="text-label text-text-secondary mb-3">
+            The glowing accounts on the graph — <span className="text-success">green ←</span>{' '}
+            money received from them, <span className="text-danger">red →</span> money sent to
+            them.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {connections.map((c) => (
+              <li key={c.account} className="card !p-3">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-body font-medium text-text-primary break-all">
+                    {c.account.replace('ext:', '')}
+                  </span>
+                  <span className="text-label text-text-secondary shrink-0">
+                    {c.transfers.length} transfer{c.transfers.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="text-label mb-2">
+                  {c.totalIn > 0 && (
+                    <span className="text-success mr-3">← received {formatINR(String(c.totalIn))}</span>
+                  )}
+                  {c.totalOut > 0 && (
+                    <span className="text-danger">→ sent {formatINR(String(c.totalOut))}</span>
+                  )}
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {c.transfers.map((t, i) => (
+                    <li key={i} className="text-label text-text-secondary flex items-center gap-2">
+                      <span className={t.dir === 'in' ? 'text-success' : 'text-danger'}>
+                        {t.dir === 'in' ? '←' : '→'}
+                      </span>
+                      <span className="tabular-nums">{formatINR(t.amount)}</span>
+                      <span>· {formatDateIST(t.when)}</span>
+                      <span className="tag bg-primary-soft text-primary">{t.channel}</span>
+                      <span
+                        className={`tag ${
+                          t.tier === 'confirmed'
+                            ? 'bg-success-soft text-success'
+                            : t.tier === 'probable'
+                              ? 'bg-warning-soft text-warning'
+                              : 'bg-primary-soft text-primary'
+                        }`}
+                      >
+                        {t.tier === 'external' ? 'one-sided' : t.tier}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
