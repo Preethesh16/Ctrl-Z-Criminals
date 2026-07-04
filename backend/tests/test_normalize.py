@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from app.normalize.amounts import parse_amount
+from app.normalize.amounts import parse_amount, parse_balance_amount
 from app.normalize.channel import classify_channel
 from app.normalize.dates import parse_date, parse_time
 from app.normalize.reference import extract_counterparty, extract_reference
@@ -53,6 +53,15 @@ class TestAmounts:
         assert parse_amount("TOTAL") == (None, None)
         assert parse_amount("-") == (None, None)
         assert parse_amount(float("nan")) == (None, None)
+
+    def test_pdf_split_digit_before_amount(self):
+        assert parse_amount("5 80000.00") == (Decimal("80000.00"), None)
+        assert parse_amount("7 10000.00") == (Decimal("10000.00"), None)
+
+    def test_balance_preserves_sign(self):
+        assert parse_balance_amount("-73,678.82") == Decimal("-73678.82")
+        assert parse_balance_amount("1,000.00 Dr") == Decimal("-1000.00")
+        assert parse_balance_amount("1,000.00 Cr") == Decimal("1000.00")
 
 
 class TestChannel:
