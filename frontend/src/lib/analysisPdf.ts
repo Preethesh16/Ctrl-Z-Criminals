@@ -28,6 +28,30 @@ type RoledNode = GraphNodeData & { role: NodeRole }
 
 const MARGIN = 40
 
+/** Plain-language facts block used as the "Summary" at the top of each PDF. */
+function summaryBlock(doc: jsPDF, facts: Array<[string, string]>, y: number): number {
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.text('Summary', MARGIN, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  facts.forEach(([label, value], i) => {
+    doc.text(`${label}: ${value}`, MARGIN, y + 16 + i * 14)
+  })
+  return y + 16 + facts.length * 14 + 10
+}
+
+function graphSummaryFacts(nodes: Array<{ role: NodeRole; label: string }>, roundTrips: RoundTrip[]): Array<[string, string]> {
+  const victim = nodes.find((n) => n.role === 'victim')
+  return [
+    ['Accounts in graph', String(nodes.length)],
+    ['Mule accounts', String(nodes.filter((n) => n.role === 'mule').length)],
+    ['Suspect accounts', String(nodes.filter((n) => n.role === 'suspect').length)],
+    ['Likely victim', victim ? victim.label.replace('ext:', '') : '—'],
+    ['Round trips detected', String(roundTrips.length)],
+  ]
+}
+
 function newDoc(): jsPDF {
   return new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
 }
@@ -224,6 +248,7 @@ export function downloadGraphReportPdf(opts: {
 }): void {
   const doc = newDoc()
   let y = header(doc, 'TraceNet — Money Flow Report', opts.caseLabel)
+  y = summaryBlock(doc, graphSummaryFacts(opts.nodes, opts.roundTrips), y)
   if (opts.graphPng) y = addImage(doc, opts.graphPng, y)
   doc.setFontSize(9)
   doc.text(
@@ -276,6 +301,17 @@ export function downloadTrailReportPdf(opts: {
 }): void {
   const doc = newDoc()
   let y = header(doc, 'TraceNet — Money Trail Report', opts.caseLabel)
+  y = summaryBlock(
+    doc,
+    [
+      ['Credit followed (INR)', opts.credit.amount_inr],
+      ['Received on', `${opts.credit.txn_date} into A/c ${opts.credit.account_ref}`],
+      ['Moved on (INR)', opts.trail.spent],
+      ['Still resting in account (INR)', opts.trail.resting],
+      ['Layers traced', String(opts.trail.hops.length)],
+    ],
+    y,
+  )
   y = trailSection(doc, opts.credit, opts.trail, opts.roles ?? new Map(), y, opts.sankeyPng)
   void y
   footerAll(doc, `money trail — ${opts.caseLabel}`)
@@ -300,6 +336,14 @@ export function downloadVisualAnalysisPdf(opts: {
   }))
   const doc = newDoc()
   let y = header(doc, 'TraceNet — Visual Analysis Report', opts.caseLabel)
+  y = summaryBlock(
+    doc,
+    [
+      ...graphSummaryFacts(nodes, opts.roundTrips),
+      ['Money trails included', String(opts.trails.length)],
+    ],
+    y,
+  )
 
   y = sectionTitle(doc, '1. Money flow — who sent money to whom', y)
   if (opts.graphPng) y = addImage(doc, opts.graphPng, y + 6)

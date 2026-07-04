@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { api, ApiError } from '../api/client'
 import type { Disposition, GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
 import type { NodeConnection } from '../lib/graphRoles'
+import { DownloadChoice } from './ui/DownloadChoice'
 import { explainFlag, flagLabel } from '../lib/flagExplanations'
 import { formatDateIST, formatINR } from '../lib/format'
 import { DispositionDonut } from '../pages/DashboardPage'
@@ -51,6 +52,7 @@ export function NodeDrawer({
   node,
   connections = [],
   onDownloadPdf,
+  onDownloadExcel,
   layersActive = false,
   onToggleLayers,
   onClose,
@@ -59,6 +61,7 @@ export function NodeDrawer({
   node: GraphNodeData & { role?: string }
   connections?: NodeConnection[]
   onDownloadPdf?: () => void
+  onDownloadExcel?: () => void
   layersActive?: boolean
   onToggleLayers?: () => void
   onClose: () => void
@@ -108,14 +111,21 @@ export function NodeDrawer({
 
       {(onDownloadPdf || onToggleLayers) && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {onDownloadPdf && (
-            <button
-              onClick={onDownloadPdf}
-              className="rounded-control border border-border px-3 py-2 text-body text-text-primary hover:bg-background transition-colors"
-            >
-              ⬇ PDF report for this account
-            </button>
-          )}
+          {onDownloadPdf &&
+            (onDownloadExcel ? (
+              <DownloadChoice
+                label="⬇ Report for this account"
+                onPdf={onDownloadPdf}
+                onExcel={onDownloadExcel}
+              />
+            ) : (
+              <button
+                onClick={onDownloadPdf}
+                className="rounded-control border border-border px-3 py-2 text-body text-text-primary hover:bg-background transition-colors"
+              >
+                ⬇ PDF report for this account
+              </button>
+            ))}
           {onToggleLayers && (
             <button
               onClick={onToggleLayers}

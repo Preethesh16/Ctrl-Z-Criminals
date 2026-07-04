@@ -8,7 +8,9 @@ import type { CaseGraph, CaseOut, GraphEdgeData, GraphNodeData, RoundTrip } from
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { NodeDrawer, EdgeDrawer } from '../components/GraphDrawers'
+import { DownloadChoice } from '../components/ui/DownloadChoice'
 import { downloadGraphReportPdf } from '../lib/analysisPdf'
+import { downloadGraphReportXlsx } from '../lib/analysisXlsx'
 import { formatINR } from '../lib/format'
 import {
   buildGraphStylesheet,
@@ -335,21 +337,31 @@ export function FlowGraphPage() {
     )
   }, [graph, selectedNode])
 
-  /** Graph report PDF: full graph image + accounts + round trips; when a node
-   *  is selected, its incoming/outgoing transfers are appended. */
-  const exportGraphPdf = useCallback(() => {
-    downloadGraphReportPdf({
-      caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
-      graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
-      // all accounts, not just the search-filtered list
-      nodes: (graph?.nodes ?? []).map((n) => ({
-        ...n.data,
-        role: roles.get(n.data.id) ?? ('other' as NodeRole),
-      })),
-      roundTrips,
-      focused: selectedNode ? { node: selectedNode, connections } : null,
-    })
-  }, [cases, caseId, graph, roles, roundTrips, selectedNode, connections])
+  /** Graph report (PDF or Excel): accounts + round trips; when a node is
+   *  selected, its incoming/outgoing transfers are appended. */
+  const exportGraphReport = useCallback(
+    (format: 'pdf' | 'excel') => {
+      const common = {
+        caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
+        // all accounts, not just the search-filtered list
+        nodes: (graph?.nodes ?? []).map((n) => ({
+          ...n.data,
+          role: roles.get(n.data.id) ?? ('other' as NodeRole),
+        })),
+        roundTrips,
+        focused: selectedNode ? { node: selectedNode, connections } : null,
+      }
+      if (format === 'pdf') {
+        downloadGraphReportPdf({
+          ...common,
+          graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
+        })
+      } else {
+        downloadGraphReportXlsx(common)
+      }
+    },
+    [cases, caseId, graph, roles, roundTrips, selectedNode, connections],
+  )
 
   const exportPng = useCallback(() => {
     const cy = cyRef.current
@@ -396,9 +408,11 @@ export function FlowGraphPage() {
               <Button variant="secondary" onClick={exportPng}>
                 Export PNG
               </Button>
-              <Button variant="secondary" onClick={exportGraphPdf}>
-                ⬇ Download PDF
-              </Button>
+              <DownloadChoice
+                label="⬇ Download report"
+                onPdf={() => exportGraphReport('pdf')}
+                onExcel={() => exportGraphReport('excel')}
+              />
             </>
           )}
         </div>
@@ -655,7 +669,8 @@ export function FlowGraphPage() {
             caseId={caseId}
             node={selectedNode}
             connections={connections}
-            onDownloadPdf={exportGraphPdf}
+            onDownloadPdf={() => exportGraphReport('pdf')}
+            onDownloadExcel={() => exportGraphReport('excel')}
             layersActive={layersFrom === selectedNode.id}
             onToggleLayers={() =>
               setLayersFrom((prev) => (prev === selectedNode.id ? null : selectedNode.id))

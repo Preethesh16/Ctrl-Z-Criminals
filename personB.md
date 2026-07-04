@@ -89,6 +89,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 24: PDF/Excel format chooser on every report download + PDF summaries
+- New `ui/DownloadChoice.tsx`: any report button expands to exactly two options (Format: [PDF] [Excel] [✕]). Wired everywhere a client-side report downloads: review step (Excel replaces CSV — CSV fn kept but unwired), Flow Graph header + node-drawer account report, Money Trail, Reports-page visual analysis.
+- New `lib/analysisXlsx.ts` + `downloadReviewReportXlsx`: real .xlsx workbooks via SheetJS — **installed patched xlsx 0.20.3 from cdn.sheetjs.com** (npm's 0.18.5 has known CVEs; 0 vulnerabilities after). Every workbook opens with a Summary sheet; sheets mirror the PDF sections (Accounts/Round trips/Trail layers/Disposition/Account focus).
+- Every PDF now opens with a **Summary block**: review (accounts, total debits/credits, flagged rows), graph (accounts/mules/suspects/victim/round trips), trail (credit, moved, resting, layers), visual analysis (combined). Backend server exports (report.pdf/standardized.pdf/case.xlsx) untouched — they're A's lane and already single-format cards.
+- Verified headless: chooser on all 4 spots; downloads validated (3 xlsx = real Excel 2007+ with correct sheet lists, PDF shows summary line). Build + lint clean; Docker web rebuilt; pushed.
+
+
 ### 2026-07-04 — Session 23: "Show layers" toggle in node drawer (hop-distance view)
 - Per user decision (after design discussion: per-node opt-in beats global button / automatic-on-click): NodeDrawer gains "◎ Show layers from this account" / "■ Hide layers" toggle. On: undirected BFS from that node (`cy.elements().bfs`) paints layer 1 violet / 2 amber / 3 grey underlays (deeper dimmed, edges beyond layer 3 dimmed), graph re-arranges into **concentric breadthfirst rings** around the account (animated), top-left legend appears. Off / drawer close / other node click / case switch → classes cleared and cose layout restored.
 - Purely additive: layer branch takes priority inside the existing highlight effect only while toggled; glow, loops, filters, PDF all untouched (verified glow returns after hide: 3 neighbor edges).

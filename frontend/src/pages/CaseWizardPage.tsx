@@ -8,7 +8,8 @@ import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { formatDateIST, formatINR } from '../lib/format'
-import { downloadReviewReportCsv, downloadReviewReportPdf } from '../lib/reviewReport'
+import { DownloadChoice } from '../components/ui/DownloadChoice'
+import { downloadReviewReportPdf, downloadReviewReportXlsx } from '../lib/reviewReport'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
 const STEPS = ['Upload', 'Review', 'Analyze'] as const
@@ -188,7 +189,7 @@ function ReviewStep({
   onChanged: () => void
   onNext: () => void
 }) {
-  const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null)
+  const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null)
   const [exportError, setExportError] = useState(false)
 
   if (!page || page.total === 0) {
@@ -201,12 +202,12 @@ function ReviewStep({
     )
   }
 
-  async function generateReviewReport(format: 'pdf' | 'csv') {
+  async function generateReviewReport(format: 'pdf' | 'excel') {
     setExporting(format)
     setExportError(false)
     try {
       if (format === 'pdf') await downloadReviewReportPdf(caseId, firNumber)
-      else await downloadReviewReportCsv(caseId, firNumber)
+      else await downloadReviewReportXlsx(caseId, firNumber)
     } catch {
       setExportError(true)
     } finally {
@@ -223,20 +224,12 @@ function ReviewStep({
           All {page.total} transactions read from the statements:
         </p>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => generateReviewReport('pdf')}
-            disabled={exporting !== null}
-          >
-            {exporting === 'pdf' ? 'Preparing PDF…' : '⬇ Generate review report (PDF)'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => generateReviewReport('csv')}
-            disabled={exporting !== null}
-          >
-            {exporting === 'csv' ? 'Preparing…' : 'CSV'}
-          </Button>
+          <DownloadChoice
+            label="⬇ Generate review report"
+            busy={exporting !== null}
+            onPdf={() => generateReviewReport('pdf')}
+            onExcel={() => generateReviewReport('excel')}
+          />
           <Button onClick={onNext}>Next: Analyze →</Button>
         </div>
       </div>

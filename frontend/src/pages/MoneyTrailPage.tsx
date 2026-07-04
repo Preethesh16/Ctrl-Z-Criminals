@@ -6,7 +6,9 @@ import { api } from '../api/client'
 import type { CaseOut, Trail, TrailStopRule, TransactionOut } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { DownloadChoice } from '../components/ui/DownloadChoice'
 import { downloadTrailReportPdf, svgToPng } from '../lib/analysisPdf'
+import { downloadTrailReportXlsx } from '../lib/analysisXlsx'
 import { deriveRoles, type NodeRole } from '../lib/graphRoles'
 import { formatDateIST, formatINR } from '../lib/format'
 import { fadeIn, staggerContainer } from '../theme/motion'
@@ -34,19 +36,18 @@ export function MoneyTrailPage() {
       .catch(() => setRoles(new Map()))
   }, [caseId])
 
-  async function exportTrailPdf() {
+  async function exportTrailReport(format: 'pdf' | 'excel') {
     if (!trail || !selectedCredit) return
     setExporting(true)
     try {
-      const svg = sankeyRef.current?.querySelector('svg') ?? null
-      const sankeyPng = svg ? await svgToPng(svg) : null
-      downloadTrailReportPdf({
-        caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
-        credit: selectedCredit,
-        trail,
-        sankeyPng,
-        roles,
-      })
+      const caseLabel = cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case'
+      if (format === 'pdf') {
+        const svg = sankeyRef.current?.querySelector('svg') ?? null
+        const sankeyPng = svg ? await svgToPng(svg) : null
+        downloadTrailReportPdf({ caseLabel, credit: selectedCredit, trail, sankeyPng, roles })
+      } else {
+        downloadTrailReportXlsx({ caseLabel, credit: selectedCredit, trail, roles })
+      }
     } finally {
       setExporting(false)
     }
@@ -184,9 +185,12 @@ export function MoneyTrailPage() {
                     Until balance recovers
                   </Button>
                   {trail && (
-                    <Button variant="secondary" onClick={exportTrailPdf} disabled={exporting}>
-                      {exporting ? 'Preparing…' : '⬇ Download PDF'}
-                    </Button>
+                    <DownloadChoice
+                      label="⬇ Download report"
+                      busy={exporting}
+                      onPdf={() => exportTrailReport('pdf')}
+                      onExcel={() => exportTrailReport('excel')}
+                    />
                   )}
                 </div>
               </div>
