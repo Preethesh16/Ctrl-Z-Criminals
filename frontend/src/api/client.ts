@@ -117,7 +117,10 @@ const realAdapter = {
   getRoundTrips: (caseId: string) => request<RoundTrip[]>(`/cases/${caseId}/round-trips`),
   getCorrelation: (caseId: string) =>
     request<CommonIdentifier[]>(`/cases/${caseId}/correlation`),
-  getDisposition: (caseId: string) => request<Disposition>(`/cases/${caseId}/disposition`),
+  getDisposition: (caseId: string, accountRef?: string) =>
+    request<Disposition>(
+      `/cases/${caseId}/disposition${accountRef ? `?account_ref=${encodeURIComponent(accountRef)}` : ''}`,
+    ),
   getTrail: (caseId: string, txnId: string, stopRule: TrailStopRule = 'tranche') =>
     request<Trail>(`/cases/${caseId}/trail/${txnId}?stop_rule=${stopRule}`),
 

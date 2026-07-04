@@ -18,7 +18,7 @@ import { GoldenHourBoard } from '../components/GoldenHourBoard'
 import { formatINR } from '../lib/format'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
-const BUCKET_META: Array<{ key: keyof Disposition['buckets']; label: string; color: string }> = [
+export const BUCKET_META: Array<{ key: keyof Disposition['buckets']; label: string; color: string }> = [
   { key: 'cash', label: 'Cash withdrawn', color: '#f5a623' },
   { key: 'cheque', label: 'Cheque', color: '#8b7cf6' },
   { key: 'redirected', label: 'Sent to other accounts', color: '#e5484d' },
@@ -299,7 +299,14 @@ function groupFlaggedByDate(txns: TransactionOut[]): Array<{ date: string; count
     .map(([date, count]) => ({ date: date.slice(5), count }))
 }
 
-function DispositionDonut({ disposition }: { disposition: Disposition }) {
+export function DispositionDonut({
+  disposition,
+  size = 220,
+}: {
+  disposition: Disposition
+  /** Node drawer renders this smaller than the dashboard's full-size donut. */
+  size?: number
+}) {
   const data = BUCKET_META.map((m) => ({
     name: m.label,
     value: Number(disposition.buckets[m.key]?.amount ?? 0),
@@ -310,12 +317,12 @@ function DispositionDonut({ disposition }: { disposition: Disposition }) {
   return (
     <div className="flex items-center gap-4">
       {/* Fixed size: ResponsiveContainer can measure 0-width on first paint and drop the pie. */}
-      <PieChart width={220} height={220}>
+      <PieChart width={size} height={size}>
         <Pie
           data={data}
           dataKey="value"
-          innerRadius={55}
-          outerRadius={90}
+          innerRadius={size * 0.25}
+          outerRadius={size * 0.41}
           strokeWidth={1}
           isAnimationActive={false}
         >

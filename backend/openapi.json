@@ -822,6 +822,7 @@
   "/cases/{case_id}/disposition": {
    "get": {
     "summary": "Case Disposition",
+    "description": "Disposition breakdown \u2014 case-wide by default, or scoped to one account.\n\nOfficers need both: the case-wide number for the dashboard, and a\nper-account number when they click a node in the flow graph (e.g.\n\"65% of what passed through THIS mule account came out as cash\").",
     "operationId": "case_disposition_cases__case_id__disposition_get",
     "parameters": [
      {
@@ -831,6 +832,22 @@
       "schema": {
        "type": "string",
        "title": "Case Id"
+      }
+     },
+     {
+      "name": "account_ref",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Account Ref"
       }
      }
     ],

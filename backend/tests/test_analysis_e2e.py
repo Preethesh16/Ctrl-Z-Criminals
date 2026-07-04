@@ -72,6 +72,34 @@ def test_disposition_cash_heavy(analyzed_case):
     assert redirected_pct > 30, d
 
 
+def test_disposition_per_account_differs_from_case_wide(analyzed_case):
+    """An officer clicking one account node must see THAT account's
+    breakdown, not the blended case-wide number (the gap this test guards
+    against: mule accounts and the victim account have very different
+    spending patterns and must not be averaged together)."""
+    case_id, _, _ = analyzed_case
+    case_wide = client.get(f"/cases/{case_id}/disposition").json()
+
+    accounts = sorted({t["account_ref"] for t in
+                       client.get(f"/cases/{case_id}/transactions", params={"limit": 500}).json()["items"]})
+    per_account = {}
+    for acct in accounts:
+        r = client.get(f"/cases/{case_id}/disposition", params={"account_ref": acct})
+        if r.status_code == 200:
+            per_account[acct] = r.json()
+
+    assert per_account, "no account had any debits to break down"
+    assert any(p["buckets"] != case_wide["buckets"] for p in per_account.values()), (
+        "every per-account breakdown matched the case-wide one — scoping isn't working"
+    )
+    assert any(p != next(iter(per_account.values())) for p in per_account.values()), (
+        "every account had an identical breakdown — accounts should differ"
+    )
+
+    r = client.get(f"/cases/{case_id}/disposition", params={"account_ref": "no-such-account"})
+    assert r.status_code == 404
+
+
 def test_smurfing_flagged(analyzed_case):
     case_id, _, _ = analyzed_case
     page = client.get(f"/cases/{case_id}/transactions", params={"limit": 500}).json()
