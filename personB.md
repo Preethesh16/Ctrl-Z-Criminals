@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 23: "Show layers" toggle in node drawer (hop-distance view)
+- Per user decision (after design discussion: per-node opt-in beats global button / automatic-on-click): NodeDrawer gains "◎ Show layers from this account" / "■ Hide layers" toggle. On: undirected BFS from that node (`cy.elements().bfs`) paints layer 1 violet / 2 amber / 3 grey underlays (deeper dimmed, edges beyond layer 3 dimmed), graph re-arranges into **concentric breadthfirst rings** around the account (animated), top-left legend appears. Off / drawer close / other node click / case switch → classes cleared and cose layout restored.
+- Purely additive: layer branch takes priority inside the existing highlight effect only while toggled; glow, loops, filters, PDF all untouched (verified glow returns after hide: 3 neighbor edges).
+- Verified headless on mock (victim → l1:3, l2:2, focus:1; screenshots). Build + lint clean; Docker web rebuilt; pushed.
+
+
 ### 2026-07-04 — Session 22: flow-graph bottom-bar filters (amount slider + txn-type chips)
 - New filter card under the graph: **minimum-transfer-amount slider** (0 → case's largest transfer, live ₹ readout) and **transaction-type multi-select chips** (distinct channels from the case's edges, any combination). Purely additive: `.filter-hidden` class (`display:none`) on non-matching edges, then on accounts left with no visible transfers; "✕ Clear filters" (and case switch) restores everything exactly — verified counts round-trip 7/6 → 3/4 (≥₹4L) → 5/5 (UPI+IMPS) → 7/6.
 - Fixed an overlap the feature exposed: the floating legend was anchored to the whole column, so it sat on the new filter card — legend now anchored to the graph box only.

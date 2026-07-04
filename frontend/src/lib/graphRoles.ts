@@ -190,6 +190,20 @@ export function buildGraphStylesheet(): cytoscape.StylesheetJson {
     // Bottom-bar filters (amount slider / txn-type chips) hide non-matching
     // elements entirely; removing the class restores them untouched.
     { selector: '.filter-hidden', style: { display: 'none' } },
+    // "Show layers" view: hop-distance rings from the selected account.
+    // Layer 1 violet, layer 2 amber, layer 3 grey; deeper nodes fade out.
+    {
+      selector: '.layer-1',
+      style: { 'underlay-color': '#8b7cf6', 'underlay-opacity': 0.35, 'underlay-padding': 8 },
+    },
+    {
+      selector: '.layer-2',
+      style: { 'underlay-color': '#f5a623', 'underlay-opacity': 0.3, 'underlay-padding': 6 },
+    },
+    {
+      selector: '.layer-3',
+      style: { 'underlay-color': '#9ca3af', 'underlay-opacity': 0.3, 'underlay-padding': 5 },
+    },
   ]
 }
 

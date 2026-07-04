@@ -37,6 +37,8 @@ export function FlowGraphPage() {
   /** Bottom-bar add-on filters: minimum edge amount + selected txn types. */
   const [minAmount, setMinAmount] = useState(0)
   const [channelFilter, setChannelFilter] = useState<Set<string>>(new Set())
+  /** "Show layers" toggle: node id the hop-distance view radiates from. */
+  const [layersFrom, setLayersFrom] = useState<string | null>(null)
 
   const roles = useMemo(
     () => (graph ? deriveRoles(graph.nodes, graph.edges) : new Map<string, NodeRole>()),
@@ -74,7 +76,45 @@ export function FlowGraphPage() {
   useEffect(() => {
     setMinAmount(0)
     setChannelFilter(new Set())
+    setLayersFrom(null)
   }, [graph])
+
+  // Layers follow the drawer: closing it or clicking a different node exits
+  // the layer view (back to the normal graph automatically).
+  useEffect(() => {
+    if (!selectedNode || (layersFrom && layersFrom !== selectedNode.id)) setLayersFrom(null)
+  }, [selectedNode, layersFrom])
+
+  // Re-arrange the graph when layers toggle: concentric rings around the
+  // chosen account (breadthfirst), back to the normal force layout on exit.
+  const prevLayersRef = useRef<string | null>(null)
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy || layersFrom === prevLayersRef.current) return
+    prevLayersRef.current = layersFrom
+    if (layersFrom) {
+      const root = cy.getElementById(layersFrom)
+      if (root.nonempty()) {
+        cy.layout({
+          name: 'breadthfirst',
+          roots: root,
+          circle: true,
+          animate: true,
+          animationDuration: 400,
+          padding: 40,
+          spacingFactor: 1.2,
+        } as cytoscape.LayoutOptions).run()
+      }
+    } else {
+      cy.layout({
+        name: 'cose',
+        animate: false,
+        padding: 40,
+        nodeDimensionsIncludeLabels: true,
+        componentSpacing: 120,
+      } as cytoscape.LayoutOptions).run()
+    }
+  }, [layersFrom])
 
   // Apply the bottom-bar filters: hide edges below the chosen amount or of
   // unselected types; hide accounts left with no visible transfers. Purely
@@ -176,9 +216,39 @@ export function FlowGraphPage() {
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass(
-      'loop-highlight loop-node dimmed focus-node neighbor-node neighbor-in neighbor-out',
+      'loop-highlight loop-node dimmed focus-node neighbor-node neighbor-in neighbor-out layer-1 layer-2 layer-3',
     )
     cy.edges().data('hopOrder', '')
+
+    // Layer view (opt-in from the drawer): paint hop-distance rings instead
+    // of the neighbourhood glow while the toggle is on.
+    if (layersFrom && selectedNode) {
+      const root = cy.getElementById(layersFrom)
+      if (root.nonempty()) {
+        const depthOf = new Map<string, number>()
+        cy.elements().bfs({
+          roots: root,
+          directed: false,
+          visit: (v, _e, _u, _i, depth) => {
+            depthOf.set(v.id(), depth)
+          },
+        })
+        cy.nodes().forEach((n) => {
+          const d = depthOf.get(n.id())
+          if (d === 0) n.addClass('focus-node')
+          else if (d === 1) n.addClass('layer-1')
+          else if (d === 2) n.addClass('layer-2')
+          else if (d === 3) n.addClass('layer-3')
+          else n.addClass('dimmed')
+        })
+        cy.edges().forEach((e) => {
+          const ds = depthOf.get(e.data('source'))
+          const dt = depthOf.get(e.data('target'))
+          if (ds === undefined || dt === undefined || ds > 3 || dt > 3) e.addClass('dimmed')
+        })
+      }
+      return
+    }
 
     if (selectedNode) {
       const node = cy.getElementById(selectedNode.id)
@@ -227,7 +297,7 @@ export function FlowGraphPage() {
       highlighted.forEach((e) => e.style('line-dash-offset', offset))
     }, 80)
     return () => window.clearInterval(timer)
-  }, [activeLoop, selectedNode, roundTrips, graph])
+  }, [activeLoop, selectedNode, layersFrom, roundTrips, graph])
 
   // Neighbouring accounts of the clicked node, with every transfer — feeds
   // the "Connected accounts" section of the node drawer.
@@ -359,6 +429,26 @@ export function FlowGraphPage() {
             className="card !p-0 h-[560px] w-full overflow-hidden"
             data-testid="cy-container"
           />
+          {layersFrom && (
+            <div className="absolute top-4 left-4 card !p-3 text-label text-text-secondary flex items-center gap-3">
+              <span className="font-medium text-text-primary">
+                Layers from {layersFrom.replace('ext:', '')}
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-secondary mr-1 align-middle" />
+                layer 1
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-warning mr-1 align-middle" />
+                layer 2
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-border mr-1 align-middle" />
+                layer 3
+              </span>
+              <span>deeper = faded</span>
+            </div>
+          )}
           <div className="absolute bottom-4 left-4 card !p-3 text-label text-text-secondary flex flex-wrap gap-x-4 gap-y-1 max-w-[calc(100%-2rem)]">
             <span>
               <span className="inline-block text-primary mr-1 align-middle">★</span>
@@ -566,6 +656,10 @@ export function FlowGraphPage() {
             node={selectedNode}
             connections={connections}
             onDownloadPdf={exportGraphPdf}
+            layersActive={layersFrom === selectedNode.id}
+            onToggleLayers={() =>
+              setLayersFrom((prev) => (prev === selectedNode.id ? null : selectedNode.id))
+            }
             onClose={() => setSelectedNode(null)}
           />
         )}
