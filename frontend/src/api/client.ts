@@ -2,8 +2,8 @@
  * Typed API client — the only sanctioned way pages talk to the server.
  * Shapes match backend/openapi.json (Person A's contract).
  *
- * Mocks by default for offline dev; set VITE_API_MODE=real (.env.local)
- * to hit the FastAPI backend proxied at /api (see vite.config.ts).
+ * Real backend by default; set VITE_API_MODE=mock (.env.local)
+ * to use the offline mock adapter instead.
  */
 import type {
   AnalysisSummary,
@@ -32,7 +32,8 @@ import type {
 import { ApiError } from './errors'
 import { mockAdapter } from './mocks/mockAdapter'
 
-const USE_REAL_API = import.meta.env.VITE_API_MODE === 'real'
+const API_MODE = String(import.meta.env.VITE_API_MODE ?? 'real').toLowerCase()
+const USE_REAL_API = API_MODE !== 'mock'
 const API_BASE = '/api'
 
 /** True when running against mocks — pages disable server-only features (file downloads). */

@@ -58,12 +58,28 @@ def map_columns(header_cells: list) -> dict[str, int]:
     """Map canonical field -> column index for a detected header row."""
     normed = [_norm(c) for c in header_cells]
     mapping: dict[str, int] = {}
+
+    # Prefer exact aliases first. Generic aliases like "amount" must not grab
+    # "BALANCE AMOUNT" before the specific balance mapper sees it.
     for field, aliases in COLUMN_ALIASES.items():
         for alias in aliases:
             for idx, cell in enumerate(normed):
                 if idx in mapping.values():
                     continue
-                if cell == alias or (len(alias) > 4 and alias in cell):
+                if cell == alias:
+                    mapping[field] = idx
+                    break
+            if field in mapping:
+                break
+
+    for field, aliases in COLUMN_ALIASES.items():
+        if field in mapping:
+            continue
+        for alias in aliases:
+            for idx, cell in enumerate(normed):
+                if idx in mapping.values():
+                    continue
+                if len(alias) > 4 and alias in cell:
                     mapping[field] = idx
                     break
             if field in mapping:

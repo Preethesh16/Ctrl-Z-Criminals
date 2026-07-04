@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .detector import detect_file_kind
 from .pdf_digital import FALLBACK_HEADER, looks_like_fallback_grid, pdf_has_text, read_pdf_grid
+from .pdf_digital import read_pdf_text_lines
 from .rows import RawTxn, grid_to_txns, repair_directions
 from .tabular import read_csv_grid, read_excel_grid, read_html_table_grid
 
@@ -131,20 +132,21 @@ def extract_rows(path: str | Path, mapping_override: dict[str, int] | None = Non
         else:
             info["extraction_mode"] = "pdf_tables"
             txns, ginfo = grid_to_txns(grid)
-            if not txns:
-                # Table detection produced garbage (mini/decorative tables).
-                # Retry with the raw-text line parser before giving up.
-                from .pdf_digital import read_pdf_text_lines
-
+            if not txns or not any(t.balance is not None for t in txns):
+                # Some bank PDFs yield a visually-correct table whose balance
+                # column is lost during table extraction. Re-run the raw-text
+                # parser when the table path is clearly incomplete.
                 fallback = read_pdf_text_lines(path)
                 if fallback:
                     info["extraction_mode"] = "pdf_text_regex_retry"
                     txns, ginfo = grid_to_txns([FALLBACK_HEADER, *fallback], base_confidence=0.85)
+                    info["directions_repaired"] = repair_directions(txns)
                 else:
                     loose = read_pdf_text_lines(path, loose=True)
                     if loose:
                         info["extraction_mode"] = "pdf_text_regex_loose"
                         txns, ginfo = grid_to_txns([FALLBACK_HEADER, *loose], base_confidence=0.75)
+                        info["directions_repaired"] = repair_directions(txns)
         if info["extraction_mode"].startswith("pdf_text_regex"):
             # Regex fallback can't know column order/direction — balance
             # deltas are the ground truth.
