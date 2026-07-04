@@ -89,6 +89,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 30: real round trips only (same-money chain) + graph perf (NOT PUSHED)
+- User: loops must be genuine cycles — dates in order AND the same money returning. Investigation: backend DFS already enforces non-decreasing dates (all 172 REALDATA loops time-ordered) but never checks **amount continuity** — every stored loop is a chain of unrelated transfers (₹5 → ₹10,000 → ₹500 → … → ₹5, "returns" up to 1.2M%).
+- **Same-money rule** (hop amount 20%–120% of previous; closing hop 10%–150% of first): applied in BOTH layers. Frontend `meaningfulRoundTrips` memo filters stored artifacts instantly (panel/count/highlight/PDF/Excel all use it; top-25 card cap; "N chains hidden — the money did not genuinely return" note). Backend `roundtrip.py` DFS prunes non-continuous hops + validates the return band (**cross-lane change, user-directed** — noted in progress.md; also shrinks the DFS search space). Calibration: forge planted loop (480k→460k→120k, 25% back) passes; all junk shapes rejected — verified by direct golden script + 14 detection tests green (7 forge-regeneration test errors are the pre-existing poppler env issue).
+- **Perf**: MAX_EDGES 800; truncated cases get `textureOnViewport`/`hideEdgesOnViewport`/`pixelRatio:1`. REALDATA load 20s→13s, no errors; mock demo loop + animation intact.
+- ⚠️ Stored REALDATA artifacts still contain the 172 junk loops (frontend hides them); a future re-analysis with the fixed backend will write clean artifacts — but do NOT re-analyze the giant case until A resolves their uncommitted flowgraph.py revert (quadratic matcher). Committed locally only.
+
+
 ### 2026-07-05 — Session 29: flow graph capped to old-style view; long tail hidden (user decision; NOT PUSHED)
 - User wanted the old 334-account look back and the other ~12k accounts hidden everywhere. Parser revert was the wrong lever (graph reads stored artifacts; reverting A's lane would also undo the accuracy fixes) — explained to user, implemented in the display layer instead: `MAX_NODES = 334`; account list + search now cover ONLY drawn accounts (full-graph search removed); `focusAccount` pruned-account fallback removed; drawer connections restricted to drawn edges; notice reworded to "Showing the N most relevant accounts" (no mention of the pruned tail). Small cases still pass through untouched.
 - Net effect on REALDATA: ~116 connected accounts drawn (334 cap minus edge-budget pruning), old visual format, ~20s load, no errors. Backend untouched; A's uncommitted local flowgraph.py edit left as-is. Committed locally only.

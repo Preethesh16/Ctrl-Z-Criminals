@@ -30,7 +30,7 @@ export function FlowGraphPage() {
   const caseId = searchParams.get('case')
   const [graph, setGraph] = useState<CaseGraph | null>(null)
   const [notAnalyzed, setNotAnalyzed] = useState(false)
-  const [roundTrips, setRoundTrips] = useState<RoundTrip[]>([])
+  const [rawRoundTrips, setRawRoundTrips] = useState<RoundTrip[]>([])
   /** Which round trip is lit up: a loop_id, 'all', or null (none). */
   const [activeLoop, setActiveLoop] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
@@ -48,6 +48,28 @@ export function FlowGraphPage() {
   )
 
   /**
+   * A cycle is only round-tripping if it's the SAME money travelling:
+   * dates in order (backend already guarantees), each hop carrying a
+   * comparable amount to the previous one (mules take cuts — money can
+   * shrink, not multiply), and the closing hop genuinely returning a
+   * meaningful share of what left. Time-ordered chains of unrelated
+   * transfers (₹5 → ₹10,000 → ₹500 → …) are hidden.
+   */
+  const roundTrips = useMemo(() => {
+    return rawRoundTrips.filter((lp) => {
+      const amts = lp.edges.map((e) => Number(e.amount))
+      if (amts.some((a) => a <= 0)) return false
+      for (let i = 1; i < amts.length; i++) {
+        const ratio = amts[i] / amts[i - 1]
+        if (ratio < 0.2 || ratio > 1.2) return false
+      }
+      const returned = amts[amts.length - 1] / amts[0]
+      return returned >= 0.1 && returned <= 1.5
+    })
+  }, [rawRoundTrips])
+  const hiddenLoopCount = rawRoundTrips.length - roundTrips.length
+
+  /**
    * Giant batch cases (10k+ accounts) freeze the browser if drawn whole.
    * Above the caps, render only the most relevant subset: every account with
    * a statement or a suspicion first, then the busiest counterparties; edges
@@ -56,7 +78,7 @@ export function FlowGraphPage() {
    * Small cases pass through untouched.
    */
   const MAX_NODES = 334
-  const MAX_EDGES = 1500
+  const MAX_EDGES = 800
   const { displayGraph, truncated } = useMemo(() => {
     if (!graph) return { displayGraph: null, truncated: false }
     if (graph.nodes.length <= MAX_NODES && graph.edges.length <= MAX_EDGES)
@@ -222,7 +244,7 @@ export function FlowGraphPage() {
       .getGraph(caseId)
       .then((g) => {
         setGraph(g)
-        api.getRoundTrips(caseId).then(setRoundTrips).catch(() => setRoundTrips([]))
+        api.getRoundTrips(caseId).then(setRawRoundTrips).catch(() => setRawRoundTrips([]))
       })
       .catch(() => setNotAnalyzed(true))
   }, [caseId])
@@ -245,6 +267,11 @@ export function FlowGraphPage() {
         ...(truncated ? { idealEdgeLength: 100, nodeOverlap: 12 } : {}),
       } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.2,
+      // Giant cases: render to texture while panning/zooming and skip edges
+      // mid-gesture — dramatically lighter. Small cases keep full quality.
+      ...(truncated
+        ? { textureOnViewport: true, hideEdgesOnViewport: true, pixelRatio: 1 }
+        : {}),
     })
     cy.on('tap', 'node', (evt: EventObject) => {
       setSelectedEdge(null)
@@ -674,7 +701,7 @@ export function FlowGraphPage() {
             )}
           </ul>
 
-          {roundTrips.length > 0 && (
+          {(roundTrips.length > 0 || hiddenLoopCount > 0) && (
             <>
             <h2 className="text-card-title text-text-primary mb-2">
               Round trips found ({roundTrips.length})
@@ -683,7 +710,13 @@ export function FlowGraphPage() {
               Money that left an account and came back to it. Press "Watch the money move" —
               the numbered arrows show each step.
             </p>
-            {roundTrips.map((lp, idx) => {
+            {hiddenLoopCount > 0 && (
+              <p className="text-label text-text-secondary mb-3">
+                {hiddenLoopCount} chain{hiddenLoopCount === 1 ? '' : 's'} hidden — the money did
+                not genuinely return (amounts don't carry through the cycle).
+              </p>
+            )}
+            {roundTrips.slice(0, 25).map((lp, idx) => {
               const isActive = activeLoop === lp.loop_id
               return (
                 <Card

@@ -134,6 +134,10 @@ Walked all 6 screens headless-browser style as a non-technical officer. Fixed: d
 
 **@Person A — report accuracy bug for court documents**: the investigation-report evidence-chain table attributes `victim_hdfc.pdf` to "SBI · Suresh Patil" — an HDFC-styled statement getting bank=SBI from header-meta extraction. Cosmetic in the demo but a defence lawyer would pounce on it. Worth a look in `headermeta.py`.
 
+### 2026-07-05 (B) — cross-lane fix: round-trip detection requires same-money chain
+
+**@Person A**: `detection/roundtrip.py` (your lane) now enforces amount continuity in the cycle DFS — each hop 20%–120% of the previous, closing hop 10%–150% of the first. Reason: on the REALDATA batch case the detector reported 172 "loops" that were time-ordered chains of unrelated transfers (first hop ₹5, later hops in lakhs, "returns" up to 1.2M%). The planted forge loop still passes (verified; 14 detection tests green). Side benefit: much smaller DFS search space. The frontend filters stored artifacts by the same rule, so old analyses display correctly without re-running. Change was user-directed; please review the thresholds.
+
 ### 2026-07-05 (B) — deviation: Golden Hour feature removed on user decision
 
 The Golden Hour board (freeze-status cards + Section 94 BNSS summons modal, plan.md §5.2 / Person B P4 task) has been removed from the product entirely — `GoldenHourBoard.tsx` deleted, Dashboard block dropped. Officer freeze state only ever lived in localStorage, so no data migration. The P4 checkbox above remains ticked as a record that it was built and verified before removal.
