@@ -89,6 +89,34 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 26: Golden Hour removed (user request)
+- Deleted `components/GoldenHourBoard.tsx` and its Dashboard usage (import + analyzed-gated block). Nothing else touched. Confirmed zero "golden hour" strings in the served bundle; freeze statuses only ever lived in localStorage (`tracenet.freeze.<caseId>`) so no backend/data cleanup needed. Deviation from plan.md §5.2 recorded in progress.md. Build + lint clean; Docker web rebuilt; pushed.
+
+
+### 2026-07-05 — Session 25: Excel reports now mirror the PDFs (user-reported mismatch)
+- User: "excel doesn't contain all the data in the pdf". Diagnosis: data WAS complete but split across sheet tabs — workbook opened on the small Summary sheet, so it looked empty vs the PDF. Fix: every workbook's **first sheet is now "Report"** — title, summary block, then every section stacked vertically in PDF order (same content as the PDF, no tab-hunting). Per-section sheets (Transactions/Accounts/Round trips/Trail/Disposition) kept after it for sorting/filtering.
+- Applied to all four client-side workbooks (review, flow graph, money trail, visual analysis) via `reportSheet()`/aoa stacking in analysisXlsx.ts + reviewReport.ts. Verified: review Report sheet = 123 rows (summary + all 111 txns), graph = 22 (all sections), trail = 16. Build + lint clean; Docker web rebuilt; pushed.
+
+
+### 2026-07-05 — Session 24: PDF/Excel format chooser on every report download + PDF summaries
+- New `ui/DownloadChoice.tsx`: any report button expands to exactly two options (Format: [PDF] [Excel] [✕]). Wired everywhere a client-side report downloads: review step (Excel replaces CSV — CSV fn kept but unwired), Flow Graph header + node-drawer account report, Money Trail, Reports-page visual analysis.
+- New `lib/analysisXlsx.ts` + `downloadReviewReportXlsx`: real .xlsx workbooks via SheetJS — **installed patched xlsx 0.20.3 from cdn.sheetjs.com** (npm's 0.18.5 has known CVEs; 0 vulnerabilities after). Every workbook opens with a Summary sheet; sheets mirror the PDF sections (Accounts/Round trips/Trail layers/Disposition/Account focus).
+- Every PDF now opens with a **Summary block**: review (accounts, total debits/credits, flagged rows), graph (accounts/mules/suspects/victim/round trips), trail (credit, moved, resting, layers), visual analysis (combined). Backend server exports (report.pdf/standardized.pdf/case.xlsx) untouched — they're A's lane and already single-format cards.
+- Verified headless: chooser on all 4 spots; downloads validated (3 xlsx = real Excel 2007+ with correct sheet lists, PDF shows summary line). Build + lint clean; Docker web rebuilt; pushed.
+
+
+### 2026-07-04 — Session 23: "Show layers" toggle in node drawer (hop-distance view)
+- Per user decision (after design discussion: per-node opt-in beats global button / automatic-on-click): NodeDrawer gains "◎ Show layers from this account" / "■ Hide layers" toggle. On: undirected BFS from that node (`cy.elements().bfs`) paints layer 1 violet / 2 amber / 3 grey underlays (deeper dimmed, edges beyond layer 3 dimmed), graph re-arranges into **concentric breadthfirst rings** around the account (animated), top-left legend appears. Off / drawer close / other node click / case switch → classes cleared and cose layout restored.
+- Purely additive: layer branch takes priority inside the existing highlight effect only while toggled; glow, loops, filters, PDF all untouched (verified glow returns after hide: 3 neighbor edges).
+- Verified headless on mock (victim → l1:3, l2:2, focus:1; screenshots). Build + lint clean; Docker web rebuilt; pushed.
+
+
+### 2026-07-04 — Session 22: flow-graph bottom-bar filters (amount slider + txn-type chips)
+- New filter card under the graph: **minimum-transfer-amount slider** (0 → case's largest transfer, live ₹ readout) and **transaction-type multi-select chips** (distinct channels from the case's edges, any combination). Purely additive: `.filter-hidden` class (`display:none`) on non-matching edges, then on accounts left with no visible transfers; "✕ Clear filters" (and case switch) restores everything exactly — verified counts round-trip 7/6 → 3/4 (≥₹4L) → 5/5 (UPI+IMPS) → 7/6.
+- Fixed an overlap the feature exposed: the floating legend was anchored to the whole column, so it sat on the new filter card — legend now anchored to the graph box only.
+- Filters compose with existing features untouched (roles, loops, glow, panel). Build + lint clean; Docker web rebuilt; branch pushed.
+
+
 ### 2026-07-04 — Session 21: Holding Time page (6th sidebar feature)
 - New `/holding-time` route + sidebar entry. `lib/holdingTime.ts` runs client-side FIFO per account: each credit = a tranche, debits consume oldest-first, tranche's holding time = arrival → fully-consumed (or → last account activity if still resting). Classification: rapid <24h (mule sign, red) / short <7d (amber) / long-or-resting (green, freeze opportunity).
 - Page pattern matches Money Trail: case picker, account picker sorted worst-first (most rapid pass-throughs), stat cards (credits audited / average holding / still in account), and a **timeline audit** — one positioned duration bar per credit on the account's date axis, with arrived→moved dates, channel, narration, and a plain-English badge.

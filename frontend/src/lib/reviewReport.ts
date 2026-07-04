@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import * as XLSX from 'xlsx'
 import { api } from '../api/client'
 import type { TransactionOut } from '../api/types'
 
@@ -73,9 +74,24 @@ export async function downloadReviewReportPdf(
     40,
     88,
   )
+  // Summary line: accounts covered, money totals, flagged rows.
+  const accounts = new Set(rows.map((t) => t.account_ref)).size
+  const totalDebit = rows
+    .filter((t) => t.direction === 'DEBIT' && !t.excluded)
+    .reduce((s, t) => s + Number(t.amount_inr), 0)
+  const totalCredit = rows
+    .filter((t) => t.direction === 'CREDIT' && !t.excluded)
+    .reduce((s, t) => s + Number(t.amount_inr), 0)
+  const flaggedRows = rows.filter((t) => t.flags.length > 0).length
+  doc.text(
+    `Summary: ${accounts} account${accounts === 1 ? '' : 's'} — total debits ${totalDebit.toFixed(2)} INR` +
+      ` — total credits ${totalCredit.toFixed(2)} INR — flagged rows ${flaggedRows}`,
+    40,
+    102,
+  )
 
   autoTable(doc, {
-    startY: 104,
+    startY: 116,
     head: [
       [
         'Account No.',
@@ -130,6 +146,92 @@ export async function downloadReviewReportPdf(
   })
 
   doc.save(`review-report-${safeFileStem(firNumber, caseId)}.pdf`)
+}
+
+/**
+ * Same report as a real Excel workbook: Summary sheet + all transactions,
+ * for co-workers who keep working on the rows in Excel.
+ */
+export async function downloadReviewReportXlsx(
+  caseId: string,
+  firNumber: string | null,
+): Promise<void> {
+  const { rows, total } = await fetchAllTransactions(caseId)
+  const reviewed = rows.filter((t) => !t.needs_review && !t.excluded).length
+  const pending = rows.filter((t) => t.needs_review && !t.excluded).length
+  const excluded = rows.filter((t) => t.excluded).length
+  const totalDebit = rows
+    .filter((t) => t.direction === 'DEBIT' && !t.excluded)
+    .reduce((s, t) => s + Number(t.amount_inr), 0)
+  const totalCredit = rows
+    .filter((t) => t.direction === 'CREDIT' && !t.excluded)
+    .reduce((s, t) => s + Number(t.amount_inr), 0)
+
+  const summaryFacts: Array<[string, string]> = [
+    ['Case', firNumber ?? caseId],
+    [
+      'Generated',
+      `${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`,
+    ],
+    [
+      'Transactions',
+      `${rows.length}${rows.length < total ? ` of ${total} (truncated)` : ''}`,
+    ],
+    ['Accounts', String(new Set(rows.map((t) => t.account_ref)).size)],
+    ['Reviewed', String(reviewed)],
+    ['Pending review', String(pending)],
+    ['Excluded', String(excluded)],
+    ['Total debits (INR)', totalDebit.toFixed(2)],
+    ['Total credits (INR)', totalCredit.toFixed(2)],
+    ['Flagged rows', String(rows.filter((t) => t.flags.length > 0).length)],
+  ]
+  const txnHeader = [
+    'Account No.',
+    'Date',
+    'Time',
+    'Narration',
+    'Channel',
+    'Reference ID',
+    'Debit (INR)',
+    'Credit (INR)',
+    'Balance (INR)',
+    'Review status',
+    'Flags',
+  ]
+  const txnRows = rows.map((t) => [
+    t.account_ref,
+    t.txn_date,
+    t.txn_time ?? '',
+    t.narration_raw,
+    t.channel,
+    t.reference_id ?? '',
+    t.direction === 'DEBIT' ? Number(t.amount_inr) : '',
+    t.direction === 'CREDIT' ? Number(t.amount_inr) : '',
+    t.balance_after !== null ? Number(t.balance_after) : '',
+    reviewStatus(t),
+    t.flags.map((f) => f.rule).join('; '),
+  ])
+
+  const wb = XLSX.utils.book_new()
+  // First sheet mirrors the PDF: title, summary block, then the full table —
+  // opening the file shows everything the PDF shows, no tab-hunting needed.
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ['TraceNet — Transaction Review Report'],
+      ...summaryFacts.map(([k, v]) => [k, v]),
+      [],
+      txnHeader,
+      ...txnRows,
+    ]),
+    'Report',
+  )
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([txnHeader, ...txnRows]),
+    'Transactions',
+  )
+  XLSX.writeFile(wb, `review-report-${safeFileStem(firNumber, caseId)}.xlsx`)
 }
 
 /**

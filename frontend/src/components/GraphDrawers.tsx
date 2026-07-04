@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { api, ApiError } from '../api/client'
 import type { Disposition, GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
 import type { NodeConnection } from '../lib/graphRoles'
+import { DownloadChoice } from './ui/DownloadChoice'
 import { explainFlag, flagLabel } from '../lib/flagExplanations'
 import { formatDateIST, formatINR } from '../lib/format'
 import { DispositionDonut } from '../pages/DashboardPage'
@@ -51,12 +52,18 @@ export function NodeDrawer({
   node,
   connections = [],
   onDownloadPdf,
+  onDownloadExcel,
+  layersActive = false,
+  onToggleLayers,
   onClose,
 }: {
   caseId: string
   node: GraphNodeData & { role?: string }
   connections?: NodeConnection[]
   onDownloadPdf?: () => void
+  onDownloadExcel?: () => void
+  layersActive?: boolean
+  onToggleLayers?: () => void
   onClose: () => void
 }) {
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null)
@@ -102,13 +109,37 @@ export function NodeDrawer({
         {node.own_account && <span className="tag bg-primary-soft text-primary">Statement uploaded</span>}
       </div>
 
-      {onDownloadPdf && (
-        <button
-          onClick={onDownloadPdf}
-          className="mb-4 rounded-control border border-border px-3 py-2 text-body text-text-primary hover:bg-background transition-colors"
-        >
-          ⬇ PDF report for this account
-        </button>
+      {(onDownloadPdf || onToggleLayers) && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {onDownloadPdf &&
+            (onDownloadExcel ? (
+              <DownloadChoice
+                label="⬇ Report for this account"
+                onPdf={onDownloadPdf}
+                onExcel={onDownloadExcel}
+              />
+            ) : (
+              <button
+                onClick={onDownloadPdf}
+                className="rounded-control border border-border px-3 py-2 text-body text-text-primary hover:bg-background transition-colors"
+              >
+                ⬇ PDF report for this account
+              </button>
+            ))}
+          {onToggleLayers && (
+            <button
+              onClick={onToggleLayers}
+              className={`rounded-control px-3 py-2 text-body transition-colors ${
+                layersActive
+                  ? 'bg-primary text-text-inverse'
+                  : 'border border-border text-text-primary hover:bg-background'
+              }`}
+              title="Arrange the graph as rings of hop distance from this account"
+            >
+              {layersActive ? '■ Hide layers' : '◎ Show layers from this account'}
+            </button>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 mb-6">

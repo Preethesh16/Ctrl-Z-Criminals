@@ -8,7 +8,9 @@ import type { CaseGraph, CaseOut, GraphEdgeData, GraphNodeData, RoundTrip } from
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { NodeDrawer, EdgeDrawer } from '../components/GraphDrawers'
+import { DownloadChoice } from '../components/ui/DownloadChoice'
 import { downloadGraphReportPdf } from '../lib/analysisPdf'
+import { downloadGraphReportXlsx } from '../lib/analysisXlsx'
 import { formatINR } from '../lib/format'
 import {
   buildGraphStylesheet,
@@ -34,6 +36,11 @@ export function FlowGraphPage() {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphEdgeData | null>(null)
   const [accountQuery, setAccountQuery] = useState('')
+  /** Bottom-bar add-on filters: minimum edge amount + selected txn types. */
+  const [minAmount, setMinAmount] = useState(0)
+  const [channelFilter, setChannelFilter] = useState<Set<string>>(new Set())
+  /** "Show layers" toggle: node id the hop-distance view radiates from. */
+  const [layersFrom, setLayersFrom] = useState<string | null>(null)
 
   const roles = useMemo(
     () => (graph ? deriveRoles(graph.nodes, graph.edges) : new Map<string, NodeRole>()),
@@ -54,6 +61,83 @@ export function FlowGraphPage() {
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
   }, [graph, roles, accountQuery])
+
+  /** Largest single transfer in the graph — the slider's upper bound. */
+  const maxEdgeAmount = useMemo(
+    () => Math.max(0, ...(graph?.edges ?? []).map((e) => Number(e.data.amount))),
+    [graph],
+  )
+
+  /** Distinct transaction types present in this case's transfers. */
+  const channelOptions = useMemo(
+    () => [...new Set((graph?.edges ?? []).map((e) => e.data.channel))].sort(),
+    [graph],
+  )
+
+  // Reset the add-on filters whenever a different case's graph loads.
+  useEffect(() => {
+    setMinAmount(0)
+    setChannelFilter(new Set())
+    setLayersFrom(null)
+  }, [graph])
+
+  // Layers follow the drawer: closing it or clicking a different node exits
+  // the layer view (back to the normal graph automatically).
+  useEffect(() => {
+    if (!selectedNode || (layersFrom && layersFrom !== selectedNode.id)) setLayersFrom(null)
+  }, [selectedNode, layersFrom])
+
+  // Re-arrange the graph when layers toggle: concentric rings around the
+  // chosen account (breadthfirst), back to the normal force layout on exit.
+  const prevLayersRef = useRef<string | null>(null)
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy || layersFrom === prevLayersRef.current) return
+    prevLayersRef.current = layersFrom
+    if (layersFrom) {
+      const root = cy.getElementById(layersFrom)
+      if (root.nonempty()) {
+        cy.layout({
+          name: 'breadthfirst',
+          roots: root,
+          circle: true,
+          animate: true,
+          animationDuration: 400,
+          padding: 40,
+          spacingFactor: 1.2,
+        } as cytoscape.LayoutOptions).run()
+      }
+    } else {
+      cy.layout({
+        name: 'cose',
+        animate: false,
+        padding: 40,
+        nodeDimensionsIncludeLabels: true,
+        componentSpacing: 120,
+      } as cytoscape.LayoutOptions).run()
+    }
+  }, [layersFrom])
+
+  // Apply the bottom-bar filters: hide edges below the chosen amount or of
+  // unselected types; hide accounts left with no visible transfers. Purely
+  // additive — clearing the filters restores the graph exactly as it was.
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    cy.batch(() => {
+      cy.elements().removeClass('filter-hidden')
+      if (minAmount <= 0 && channelFilter.size === 0) return
+      cy.edges().forEach((e) => {
+        const amountOk = Number(e.data('amount')) >= minAmount
+        const channelOk = channelFilter.size === 0 || channelFilter.has(e.data('channel'))
+        if (!amountOk || !channelOk) e.addClass('filter-hidden')
+      })
+      cy.nodes().forEach((n) => {
+        const visible = n.connectedEdges().not('.filter-hidden').nonempty()
+        if (!visible) n.addClass('filter-hidden')
+      })
+    })
+  }, [minAmount, channelFilter, graph])
 
   /** Same effect as tapping the node on the canvas, plus centre the graph on it. */
   const focusAccount = useCallback((id: string) => {
@@ -134,9 +218,39 @@ export function FlowGraphPage() {
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass(
-      'loop-highlight loop-node dimmed focus-node neighbor-node neighbor-in neighbor-out',
+      'loop-highlight loop-node dimmed focus-node neighbor-node neighbor-in neighbor-out layer-1 layer-2 layer-3',
     )
     cy.edges().data('hopOrder', '')
+
+    // Layer view (opt-in from the drawer): paint hop-distance rings instead
+    // of the neighbourhood glow while the toggle is on.
+    if (layersFrom && selectedNode) {
+      const root = cy.getElementById(layersFrom)
+      if (root.nonempty()) {
+        const depthOf = new Map<string, number>()
+        cy.elements().bfs({
+          roots: root,
+          directed: false,
+          visit: (v, _e, _u, _i, depth) => {
+            depthOf.set(v.id(), depth)
+          },
+        })
+        cy.nodes().forEach((n) => {
+          const d = depthOf.get(n.id())
+          if (d === 0) n.addClass('focus-node')
+          else if (d === 1) n.addClass('layer-1')
+          else if (d === 2) n.addClass('layer-2')
+          else if (d === 3) n.addClass('layer-3')
+          else n.addClass('dimmed')
+        })
+        cy.edges().forEach((e) => {
+          const ds = depthOf.get(e.data('source'))
+          const dt = depthOf.get(e.data('target'))
+          if (ds === undefined || dt === undefined || ds > 3 || dt > 3) e.addClass('dimmed')
+        })
+      }
+      return
+    }
 
     if (selectedNode) {
       const node = cy.getElementById(selectedNode.id)
@@ -185,7 +299,7 @@ export function FlowGraphPage() {
       highlighted.forEach((e) => e.style('line-dash-offset', offset))
     }, 80)
     return () => window.clearInterval(timer)
-  }, [activeLoop, selectedNode, roundTrips, graph])
+  }, [activeLoop, selectedNode, layersFrom, roundTrips, graph])
 
   // Neighbouring accounts of the clicked node, with every transfer — feeds
   // the "Connected accounts" section of the node drawer.
@@ -223,21 +337,31 @@ export function FlowGraphPage() {
     )
   }, [graph, selectedNode])
 
-  /** Graph report PDF: full graph image + accounts + round trips; when a node
-   *  is selected, its incoming/outgoing transfers are appended. */
-  const exportGraphPdf = useCallback(() => {
-    downloadGraphReportPdf({
-      caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
-      graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
-      // all accounts, not just the search-filtered list
-      nodes: (graph?.nodes ?? []).map((n) => ({
-        ...n.data,
-        role: roles.get(n.data.id) ?? ('other' as NodeRole),
-      })),
-      roundTrips,
-      focused: selectedNode ? { node: selectedNode, connections } : null,
-    })
-  }, [cases, caseId, graph, roles, roundTrips, selectedNode, connections])
+  /** Graph report (PDF or Excel): accounts + round trips; when a node is
+   *  selected, its incoming/outgoing transfers are appended. */
+  const exportGraphReport = useCallback(
+    (format: 'pdf' | 'excel') => {
+      const common = {
+        caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
+        // all accounts, not just the search-filtered list
+        nodes: (graph?.nodes ?? []).map((n) => ({
+          ...n.data,
+          role: roles.get(n.data.id) ?? ('other' as NodeRole),
+        })),
+        roundTrips,
+        focused: selectedNode ? { node: selectedNode, connections } : null,
+      }
+      if (format === 'pdf') {
+        downloadGraphReportPdf({
+          ...common,
+          graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
+        })
+      } else {
+        downloadGraphReportXlsx(common)
+      }
+    },
+    [cases, caseId, graph, roles, roundTrips, selectedNode, connections],
+  )
 
   const exportPng = useCallback(() => {
     const cy = cyRef.current
@@ -284,9 +408,11 @@ export function FlowGraphPage() {
               <Button variant="secondary" onClick={exportPng}>
                 Export PNG
               </Button>
-              <Button variant="secondary" onClick={exportGraphPdf}>
-                ⬇ Download PDF
-              </Button>
+              <DownloadChoice
+                label="⬇ Download report"
+                onPdf={() => exportGraphReport('pdf')}
+                onExcel={() => exportGraphReport('excel')}
+              />
             </>
           )}
         </div>
@@ -310,12 +436,33 @@ export function FlowGraphPage() {
       )}
 
       <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
-        <div className="relative flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
+          <div className="relative">
           <div
             ref={containerRef}
             className="card !p-0 h-[560px] w-full overflow-hidden"
             data-testid="cy-container"
           />
+          {layersFrom && (
+            <div className="absolute top-4 left-4 card !p-3 text-label text-text-secondary flex items-center gap-3">
+              <span className="font-medium text-text-primary">
+                Layers from {layersFrom.replace('ext:', '')}
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-secondary mr-1 align-middle" />
+                layer 1
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-warning mr-1 align-middle" />
+                layer 2
+              </span>
+              <span>
+                <span className="inline-block w-3 h-3 rounded-pill bg-border mr-1 align-middle" />
+                layer 3
+              </span>
+              <span>deeper = faded</span>
+            </div>
+          )}
           <div className="absolute bottom-4 left-4 card !p-3 text-label text-text-secondary flex flex-wrap gap-x-4 gap-y-1 max-w-[calc(100%-2rem)]">
             <span>
               <span className="inline-block text-primary mr-1 align-middle">★</span>
@@ -339,6 +486,77 @@ export function FlowGraphPage() {
               one-sided (single statement)
             </span>
           </div>
+          </div>
+
+          {/* Add-on filters: amount slider + transaction-type multi-select */}
+          {graph && (
+            <Card className="!p-4 mt-4">
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <div className="min-w-[300px] flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-label uppercase text-text-secondary">
+                      Minimum transfer amount
+                    </span>
+                    <span className="text-body font-medium text-text-primary tabular-nums">
+                      {minAmount > 0 ? `≥ ${formatINR(String(minAmount))}` : 'showing all amounts'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxEdgeAmount}
+                    step={Math.max(1, Math.round(maxEdgeAmount / 200))}
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+
+                <div>
+                  <span className="block text-label uppercase text-text-secondary mb-1">
+                    Transaction types
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {channelOptions.map((ch) => {
+                      const on = channelFilter.has(ch)
+                      return (
+                        <button
+                          key={ch}
+                          onClick={() =>
+                            setChannelFilter((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(ch)) next.delete(ch)
+                              else next.add(ch)
+                              return next
+                            })
+                          }
+                          className={`tag transition-colors ${
+                            on
+                              ? 'bg-primary text-text-inverse'
+                              : 'bg-primary-soft text-primary hover:bg-primary/20'
+                          }`}
+                        >
+                          {ch}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {(minAmount > 0 || channelFilter.size > 0) && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setMinAmount(0)
+                      setChannelFilter(new Set())
+                    }}
+                  >
+                    ✕ Clear filters
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
 
         <aside className="w-80 shrink-0 max-h-[560px] overflow-y-auto">
@@ -451,7 +669,12 @@ export function FlowGraphPage() {
             caseId={caseId}
             node={selectedNode}
             connections={connections}
-            onDownloadPdf={exportGraphPdf}
+            onDownloadPdf={() => exportGraphReport('pdf')}
+            onDownloadExcel={() => exportGraphReport('excel')}
+            layersActive={layersFrom === selectedNode.id}
+            onToggleLayers={() =>
+              setLayersFrom((prev) => (prev === selectedNode.id ? null : selectedNode.id))
+            }
             onClose={() => setSelectedNode(null)}
           />
         )}

@@ -5,7 +5,9 @@ import { api, exportDownloadUrl } from '../api/client'
 import type { CaseOut, ExportKind, Trail, TransactionOut } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { DownloadChoice } from '../components/ui/DownloadChoice'
 import { downloadVisualAnalysisPdf, renderGraphPngOffscreen } from '../lib/analysisPdf'
+import { downloadVisualAnalysisXlsx } from '../lib/analysisXlsx'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
 const DOWNLOADS: Array<{ kind: ExportKind; label: string; description: string }> = [
@@ -35,9 +37,9 @@ export function ReportPage() {
   const [visualBusy, setVisualBusy] = useState(false)
   const [visualError, setVisualError] = useState('')
 
-  /** All three visual features in one client-side PDF: flow graph image,
-   *  round trips, and the FIFO trails of the top flagged credits. */
-  async function generateVisualAnalysis() {
+  /** All three visual features in one client-side report (PDF or Excel):
+   *  flow graph, round trips, and the FIFO trails of the top flagged credits. */
+  async function generateVisualAnalysis(format: 'pdf' | 'excel') {
     if (!caseId) return
     setVisualBusy(true)
     setVisualError('')
@@ -59,15 +61,13 @@ export function ReportPage() {
         const trail = await api.getTrail(caseId, credit.id, 'tranche').catch(() => null)
         if (trail && trail.hops.length > 0) trails.push({ credit, trail })
       }
-      const graphPng = await renderGraphPngOffscreen(graph)
-      downloadVisualAnalysisPdf({
-        caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId,
-        graph,
-        graphPng,
-        roundTrips,
-        trails,
-        disposition,
-      })
+      const caseLabel = cases?.find((c) => c.id === caseId)?.fir_number ?? caseId
+      if (format === 'pdf') {
+        const graphPng = await renderGraphPngOffscreen(graph)
+        downloadVisualAnalysisPdf({ caseLabel, graph, graphPng, roundTrips, trails, disposition })
+      } else {
+        downloadVisualAnalysisXlsx({ caseLabel, graph, roundTrips, trails, disposition })
+      }
     } catch {
       setVisualError('Could not build the visual analysis — run the case analysis first.')
     } finally {
@@ -174,15 +174,19 @@ export function ReportPage() {
             ))}
             <Card className="!p-4">
               <div className="text-card-title text-text-primary mb-1">
-                Visual analysis (PDF)
+                Visual analysis
               </div>
               <p className="text-label text-text-secondary mb-3">
                 Money flow graph, round-tripping steps, and the flagged credits' money trails
                 layer by layer — built on this machine, nothing uploaded
               </p>
-              <Button onClick={generateVisualAnalysis} disabled={visualBusy}>
-                {visualBusy ? 'Building…' : 'Generate & download'}
-              </Button>
+              <DownloadChoice
+                label="Generate & download"
+                variant="primary"
+                busy={visualBusy}
+                onPdf={() => generateVisualAnalysis('pdf')}
+                onExcel={() => generateVisualAnalysis('excel')}
+              />
               {visualError && <p className="text-label text-danger mt-2">{visualError}</p>}
             </Card>
             <p className="text-label text-text-secondary">
