@@ -4,6 +4,7 @@ import { CasesPage } from './pages/CasesPage'
 import { CaseWizardPage } from './pages/CaseWizardPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { FlowGraphPage } from './pages/FlowGraphPage'
+import { HoldingTimePage } from './pages/HoldingTimePage'
 import { MoneyTrailPage } from './pages/MoneyTrailPage'
 import { ReportPage } from './pages/ReportPage'
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/flow-graph" element={<FlowGraphPage />} />
           <Route path="/money-trail" element={<MoneyTrailPage />} />
+          <Route path="/holding-time" element={<HoldingTimePage />} />
           <Route path="/reports" element={<ReportPage />} />
           <Route path="*" element={<Navigate to="/cases" replace />} />
         </Route>

@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 21: Holding Time page (6th sidebar feature)
+- New `/holding-time` route + sidebar entry. `lib/holdingTime.ts` runs client-side FIFO per account: each credit = a tranche, debits consume oldest-first, tranche's holding time = arrival → fully-consumed (or → last account activity if still resting). Classification: rapid <24h (mule sign, red) / short <7d (amber) / long-or-resting (green, freeze opportunity).
+- Page pattern matches Money Trail: case picker, account picker sorted worst-first (most rapid pass-throughs), stat cards (credits audited / average holding / still in account), and a **timeline audit** — one positioned duration bar per credit on the account's date axis, with arrived→moved dates, channel, narration, and a plain-English badge.
+- Verified headless on mock (41 credits, 6 rapid, ₹88k resting; bars/legend/dates render). Build + lint clean; Docker web rebuilt; merged to main.
+
+
 ### 2026-07-04 — Session 20: PDF exports everywhere + merges to main
 - Merged `person-b/p4-review-account-report` into main (a36651a), then built branch `person-b/p4-pdf-exports`:
 - **New `lib/graphRoles.ts`**: COLORS/roles/stylesheet/element-builder extracted from FlowGraphPage (needed by the PDF lib without circular imports). `SUSPICION_ORDER` = mule → suspect → victim → other; the Flow Graph accounts panel now lists in that order (user request).
