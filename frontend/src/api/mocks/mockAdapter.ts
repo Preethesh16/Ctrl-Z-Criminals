@@ -179,13 +179,34 @@ export const mockAdapter = {
       _fileKey: fileKey,
     }
 
+    // Mirror the real backend: every upload gets a Document row; failed
+    // parses keep it with status "failed" so the review page can list them.
+    const failedDoc = (error: string) =>
+      documents.set(documentId, {
+        id: documentId,
+        case_id: caseId,
+        filename: file.name,
+        sha256: seededRandom(fileKey)().toString(16).slice(2).padEnd(16, '0').repeat(4).slice(0, 64),
+        file_kind: ext,
+        status: 'failed',
+        error,
+        account_number: null,
+        account_holder: null,
+        bank_name: null,
+        period_from: null,
+        period_to: null,
+        txn_count: 0,
+      })
+
     if (!SUPPORTED_EXTENSIONS.includes(ext)) {
       job.status = 'failed'
       job.detail = `unsupported file type: .${ext}`
+      failedDoc(job.detail)
     } else if (/protected|locked|password/i.test(file.name)) {
       // Mock trigger for the password-protected flow: name the file accordingly.
       job.status = 'failed'
       job.detail = 'PDF is password-protected'
+      failedDoc(job.detail)
     } else if (/unmapped|unknown/i.test(file.name)) {
       // Mock trigger for the column-mapping flow: unrecognized statement layout.
       job.status = 'failed'

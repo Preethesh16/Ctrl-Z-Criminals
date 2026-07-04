@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 27: failed statements surfaced in Review step (re-upload / manual fix)
+- New `components/FailedStatements.tsx`, rendered at the top of the wizard Review step (also in the zero-transactions branch so all-failed cases still show it): lists case documents with `status === 'failed'`, plain-English reason (password / unsupported / unrecognized layout / raw error), and two actions per statement — **"⬆ Re-upload corrected file"** (hidden file input → `uploadDocument` → poll job → success/failure notice incl. 409 same-file guidance → refresh) and **"✎ Fix columns manually"** (existing `ColumnMappingModal`; template-saved and re-parse-job paths both handled).
+- Mock-parity fix: mock adapter now stores a failed Document row for password/unsupported failures too (mirrors real backend, which always creates the Document row before parsing).
+- Verified headless: protected PDF upload → red "Not read" card in Review; re-upload flow completes with success notice; mapping modal opens with columns. Build + lint clean; Docker web rebuilt; pushed.
+
+
 ### 2026-07-05 — Session 26: Golden Hour removed (user request)
 - Deleted `components/GoldenHourBoard.tsx` and its Dashboard usage (import + analyzed-gated block). Nothing else touched. Confirmed zero "golden hour" strings in the served bundle; freeze statuses only ever lived in localStorage (`tracenet.freeze.<caseId>`) so no backend/data cleanup needed. Deviation from plan.md §5.2 recorded in progress.md. Build + lint clean; Docker web rebuilt; pushed.
 
