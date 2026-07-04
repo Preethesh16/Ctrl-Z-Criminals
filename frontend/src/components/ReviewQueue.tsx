@@ -113,7 +113,12 @@ export function ReviewQueue({
                       {txn.narration_raw}
                     </div>
                     <div className="text-label text-text-secondary mt-1">
-                      {formatDateIST(txn.txn_date)} ·{' '}
+                      A/c <span className="tabular-nums">{txn.account_ref}</span> ·{' '}
+                      {formatDateIST(txn.txn_date)}
+                      {txn.txn_time && (
+                        <span className="tabular-nums"> {txn.txn_time}</span>
+                      )}{' '}
+                      ·{' '}
                       <span className={txn.direction === 'DEBIT' ? 'text-danger' : 'text-success'}>
                         {txn.direction === 'DEBIT' ? 'paid out' : 'received'}{' '}
                         {formatINR(txn.amount_inr)}

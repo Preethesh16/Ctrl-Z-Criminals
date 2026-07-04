@@ -18,7 +18,12 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, session 7)
+## Current state (updated: 2026-07-04, session 13)
+
+- **Branch `person-b/p4-review-account-report`** (not merged — user said don't touch main): review-step improvements for officer handoff. Review table now shows **Account No.** column (`account_ref`) and time-of-day under the date when the statement carries it; ReviewQueue cards show `A/c <ref> · date time`. New **"⬇ Generate review report"** button on the review step → client-side CSV (`src/lib/reviewReport.ts`): pages through all case transactions (500/page, 20k cap), columns = account, date, time, narration, channel, ref, debit, credit, balance, review status (REVIEWED / PENDING REVIEW / EXCLUDED), flags; UTF-8 BOM for Excel; filename `review-report-<FIR>.csv`. Build + lint clean.
+- Everything below (session 7) still holds — Phase 4 shipped, Docker verified.
+
+## Previous state (2026-07-02, session 7)
 
 - **Phase**: 4 — **ALL Person B tasks complete and Docker-verified** on `person-b/p4-reports-ship`. `docker compose up --build` tested end-to-end on this machine: 3 containers healthy, all 9 forge formats parsed **including scanned-PDF OCR inside the container**, round trip detected, all 3 exports downloaded through nginx, running on postgres. Checkpoint 4 = joint demo rehearsal + clean-clone repeat on a second machine.
 - **Docker how-to on this machine**: WSL integration is OFF but Windows Docker Desktop is reachable via `"/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose ...` from the repo root. (Editing Docker Desktop's settings-store.json is permission-blocked — use docker.exe or enable integration manually in the GUI.) Stack left RUNNING on http://localhost:3000 after this session.
@@ -78,6 +83,13 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-04 — Session 13: review-step account column + timings + review-report CSV
+- User request (police usability): review section didn't show which account a transaction belongs to. Branch `person-b/p4-review-account-report`, NOT merged to main per instruction.
+- Wizard review table: new "Account No." column (`account_ref` — last-12 of the document's account number, set by A's `extraction.py`); "Date & Time" column shows `txn_time` under the date when present (most bank CSVs omit times — only rows with HH:MM:SS in the narration carry one).
+- ReviewQueue cards: meta line now `A/c <ref> · date [time] · paid out/received ₹…`.
+- New `src/lib/reviewReport.ts` + "⬇ Generate review report" button on the review step: client-side CSV of the finalised review for coworker handoff — account/date/time/narration/channel/ref/debit/credit/balance/review-status/flags, paginates the real API (500/page, 20k-row cap with truncation note), UTF-8 BOM, `review-report-<FIR>.csv`. Errors surface inline; button shows "Preparing…" while fetching.
+- Build + lint clean. Also earlier this session: ran the real parser over `25078124219247-YASH DUBEY.csv` locally (10,875 txns, 0 balance breaks) — found header-meta (name/acct/period) not extracted for that layout and UPI counterparty names left empty / IMPS counterparty picking the bank code — flagged to user, fixes not yet requested (A's lane anyway).
 
 ### 2026-07-03 — Session 12: submission polish — README refresh
 - Pulled main (A fixed the last known real-data misparse — AU Bank layout; coverage now effectively 100%: 160/162, the 2 remainders contain no transactions; 69 tests).
