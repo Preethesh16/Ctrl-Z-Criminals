@@ -8,7 +8,7 @@ import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { formatDateIST, formatINR } from '../lib/format'
-import { downloadReviewReportCsv } from '../lib/reviewReport'
+import { downloadReviewReportCsv, downloadReviewReportPdf } from '../lib/reviewReport'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
 const STEPS = ['Upload', 'Review', 'Analyze'] as const
@@ -188,7 +188,7 @@ function ReviewStep({
   onChanged: () => void
   onNext: () => void
 }) {
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null)
   const [exportError, setExportError] = useState(false)
 
   if (!page || page.total === 0) {
@@ -201,15 +201,16 @@ function ReviewStep({
     )
   }
 
-  async function generateReviewReport() {
-    setExporting(true)
+  async function generateReviewReport(format: 'pdf' | 'csv') {
+    setExporting(format)
     setExportError(false)
     try {
-      await downloadReviewReportCsv(caseId, firNumber)
+      if (format === 'pdf') await downloadReviewReportPdf(caseId, firNumber)
+      else await downloadReviewReportCsv(caseId, firNumber)
     } catch {
       setExportError(true)
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -222,8 +223,19 @@ function ReviewStep({
           All {page.total} transactions read from the statements:
         </p>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={generateReviewReport} disabled={exporting}>
-            {exporting ? 'Preparing…' : '⬇ Generate review report'}
+          <Button
+            variant="secondary"
+            onClick={() => generateReviewReport('pdf')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'pdf' ? 'Preparing PDF…' : '⬇ Generate review report (PDF)'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => generateReviewReport('csv')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'csv' ? 'Preparing…' : 'CSV'}
           </Button>
           <Button onClick={onNext}>Next: Analyze →</Button>
         </div>

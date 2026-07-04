@@ -18,7 +18,12 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-04, session 13)
+## Current state (updated: 2026-07-04, session 14)
+
+- **Review report now downloads as PDF** (user request): `reviewReport.ts` gained `downloadReviewReportPdf` — jsPDF + jspdf-autotable (new deps), landscape A4, case header + reviewed/pending/excluded tally + full transaction table (account, date, time, narration, channel, ref, debit, credit, balance, status), page-numbered footer, `review-report-<FIR>.pdf`. Review step now has two buttons: primary "⬇ Generate review report (PDF)" + secondary "CSV" (both share one paginated fetch, 20k cap). Verified headless: 111-row mock case → 4-page PDF, content checked via pdfplumber. **Docker web image rebuilt twice this session** — :3000 now serves the new review UI (account column + PDF/CSV report). ⚠️ Vite HMR does not fire for edits on /mnt/c under WSL — restart `npm run dev` after edits.
+- :3000 = Docker stack (real mode; contains `CEN/REALDATA/2026` = 161 docs / 192,662 txns of confidential police data — batch parser validation, never demo/screenshot it; analysis on it times out at nginx 60s and is conceptually wrong anyway: unrelated accounts). :3001 = local dev server (mock).
+
+## Previous state (2026-07-04, session 13)
 
 - **Branch `person-b/p4-review-account-report`** (not merged — user said don't touch main): review-step improvements for officer handoff. Review table now shows **Account No.** column (`account_ref`) and time-of-day under the date when the statement carries it; ReviewQueue cards show `A/c <ref> · date time`. New **"⬇ Generate review report"** button on the review step → client-side CSV (`src/lib/reviewReport.ts`): pages through all case transactions (500/page, 20k cap), columns = account, date, time, narration, channel, ref, debit, credit, balance, review status (REVIEWED / PENDING REVIEW / EXCLUDED), flags; UTF-8 BOM for Excel; filename `review-report-<FIR>.csv`. Build + lint clean.
 - Everything below (session 7) still holds — Phase 4 shipped, Docker verified.
@@ -83,6 +88,12 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-04 — Session 14: review report as PDF + Docker web rebuilds
+- Added PDF export for the review report (user request): jsPDF + jspdf-autotable client-side, same data path as the CSV (shared `fetchAllTransactions`, 500/page, 20k cap). Landscape A4, TraceNet header, FIR, generated-at IST, reviewed/pending/excluded tally, footer with page numbers. Buttons: "⬇ Generate review report (PDF)" (primary report action) + compact "CSV" beside it.
+- E2E-verified on the mock demo case via headless chromium: button click → `review-report-CEN_0042_2026.pdf`, 4 pages, text content validated with pdfplumber (header/tally/columns/footer all present).
+- Rebuilt Docker `web` image so the running :3000 stack serves the new review UI (account column from session 13 + this PDF button). Confirmed the served bundle contains the feature. Answered user questions: :3000 case `CEN/REALDATA/2026` = whole police dataset batch-parsed (161 docs, 192,662 txns) for extraction validation; analysis on it 504s (nginx 60s, synchronous analyze) and is per-complaint by design.
+- Gotcha recorded: Vite HMR misses file changes on /mnt/c (WSL 9p) — restart dev server after edits. Build + lint clean; branch `person-b/p4-review-account-report` pushed.
 
 ### 2026-07-04 — Session 13: review-step account column + timings + review-report CSV
 - User request (police usability): review section didn't show which account a transaction belongs to. Branch `person-b/p4-review-account-report`, NOT merged to main per instruction.
