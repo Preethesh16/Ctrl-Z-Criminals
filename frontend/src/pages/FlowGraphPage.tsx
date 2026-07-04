@@ -34,6 +34,9 @@ export function FlowGraphPage() {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphEdgeData | null>(null)
   const [accountQuery, setAccountQuery] = useState('')
+  /** Bottom-bar add-on filters: minimum edge amount + selected txn types. */
+  const [minAmount, setMinAmount] = useState(0)
+  const [channelFilter, setChannelFilter] = useState<Set<string>>(new Set())
 
   const roles = useMemo(
     () => (graph ? deriveRoles(graph.nodes, graph.edges) : new Map<string, NodeRole>()),
@@ -54,6 +57,45 @@ export function FlowGraphPage() {
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
   }, [graph, roles, accountQuery])
+
+  /** Largest single transfer in the graph — the slider's upper bound. */
+  const maxEdgeAmount = useMemo(
+    () => Math.max(0, ...(graph?.edges ?? []).map((e) => Number(e.data.amount))),
+    [graph],
+  )
+
+  /** Distinct transaction types present in this case's transfers. */
+  const channelOptions = useMemo(
+    () => [...new Set((graph?.edges ?? []).map((e) => e.data.channel))].sort(),
+    [graph],
+  )
+
+  // Reset the add-on filters whenever a different case's graph loads.
+  useEffect(() => {
+    setMinAmount(0)
+    setChannelFilter(new Set())
+  }, [graph])
+
+  // Apply the bottom-bar filters: hide edges below the chosen amount or of
+  // unselected types; hide accounts left with no visible transfers. Purely
+  // additive — clearing the filters restores the graph exactly as it was.
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    cy.batch(() => {
+      cy.elements().removeClass('filter-hidden')
+      if (minAmount <= 0 && channelFilter.size === 0) return
+      cy.edges().forEach((e) => {
+        const amountOk = Number(e.data('amount')) >= minAmount
+        const channelOk = channelFilter.size === 0 || channelFilter.has(e.data('channel'))
+        if (!amountOk || !channelOk) e.addClass('filter-hidden')
+      })
+      cy.nodes().forEach((n) => {
+        const visible = n.connectedEdges().not('.filter-hidden').nonempty()
+        if (!visible) n.addClass('filter-hidden')
+      })
+    })
+  }, [minAmount, channelFilter, graph])
 
   /** Same effect as tapping the node on the canvas, plus centre the graph on it. */
   const focusAccount = useCallback((id: string) => {
@@ -310,7 +352,8 @@ export function FlowGraphPage() {
       )}
 
       <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
-        <div className="relative flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
+          <div className="relative">
           <div
             ref={containerRef}
             className="card !p-0 h-[560px] w-full overflow-hidden"
@@ -339,6 +382,77 @@ export function FlowGraphPage() {
               one-sided (single statement)
             </span>
           </div>
+          </div>
+
+          {/* Add-on filters: amount slider + transaction-type multi-select */}
+          {graph && (
+            <Card className="!p-4 mt-4">
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <div className="min-w-[300px] flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-label uppercase text-text-secondary">
+                      Minimum transfer amount
+                    </span>
+                    <span className="text-body font-medium text-text-primary tabular-nums">
+                      {minAmount > 0 ? `≥ ${formatINR(String(minAmount))}` : 'showing all amounts'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxEdgeAmount}
+                    step={Math.max(1, Math.round(maxEdgeAmount / 200))}
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+
+                <div>
+                  <span className="block text-label uppercase text-text-secondary mb-1">
+                    Transaction types
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {channelOptions.map((ch) => {
+                      const on = channelFilter.has(ch)
+                      return (
+                        <button
+                          key={ch}
+                          onClick={() =>
+                            setChannelFilter((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(ch)) next.delete(ch)
+                              else next.add(ch)
+                              return next
+                            })
+                          }
+                          className={`tag transition-colors ${
+                            on
+                              ? 'bg-primary text-text-inverse'
+                              : 'bg-primary-soft text-primary hover:bg-primary/20'
+                          }`}
+                        >
+                          {ch}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {(minAmount > 0 || channelFilter.size > 0) && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setMinAmount(0)
+                      setChannelFilter(new Set())
+                    }}
+                  >
+                    ✕ Clear filters
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
 
         <aside className="w-80 shrink-0 max-h-[560px] overflow-y-auto">

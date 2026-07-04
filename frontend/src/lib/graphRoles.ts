@@ -187,6 +187,9 @@ export function buildGraphStylesheet(): cytoscape.StylesheetJson {
       },
     },
     { selector: '.dimmed', style: { opacity: 0.15 } },
+    // Bottom-bar filters (amount slider / txn-type chips) hide non-matching
+    // elements entirely; removing the class restores them untouched.
+    { selector: '.filter-hidden', style: { display: 'none' } },
   ]
 }
 

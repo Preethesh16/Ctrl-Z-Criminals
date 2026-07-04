@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 22: flow-graph bottom-bar filters (amount slider + txn-type chips)
+- New filter card under the graph: **minimum-transfer-amount slider** (0 → case's largest transfer, live ₹ readout) and **transaction-type multi-select chips** (distinct channels from the case's edges, any combination). Purely additive: `.filter-hidden` class (`display:none`) on non-matching edges, then on accounts left with no visible transfers; "✕ Clear filters" (and case switch) restores everything exactly — verified counts round-trip 7/6 → 3/4 (≥₹4L) → 5/5 (UPI+IMPS) → 7/6.
+- Fixed an overlap the feature exposed: the floating legend was anchored to the whole column, so it sat on the new filter card — legend now anchored to the graph box only.
+- Filters compose with existing features untouched (roles, loops, glow, panel). Build + lint clean; Docker web rebuilt; branch pushed.
+
+
 ### 2026-07-04 — Session 21: Holding Time page (6th sidebar feature)
 - New `/holding-time` route + sidebar entry. `lib/holdingTime.ts` runs client-side FIFO per account: each credit = a tranche, debits consume oldest-first, tranche's holding time = arrival → fully-consumed (or → last account activity if still resting). Classification: rapid <24h (mule sign, red) / short <7d (amber) / long-or-resting (green, freeze opportunity).
 - Page pattern matches Money Trail: case picker, account picker sorted worst-first (most rapid pass-throughs), stat cards (credits audited / average holding / still in account), and a **timeline audit** — one positioned duration bar per credit on the account's date axis, with arrived→moved dates, channel, narration, and a plain-English badge.
