@@ -459,7 +459,7 @@ export const mockAdapter = {
       source: string,
       target: string,
       amount: number,
-      tier: 'confirmed' | 'probable',
+      tier: 'confirmed' | 'probable' | 'external',
       when: string,
       channel = 'UPI',
     ) => ({
@@ -491,6 +491,8 @@ export const mockAdapter = {
         edge('e4', 'ext:mule3.kotak', 'ext:mule1.ramesh@oksbi', 120000, 'probable', '2026-01-06T13:20:00', 'IMPS'),
         edge('e5', 'VICTIM-HDFC', 'ext:quickmart.store@ybl', 60000, 'confirmed', '2026-01-08T09:00:00', 'POS'),
         edge('e6', 'VICTIM-HDFC', 'ext:anita.sharma', 90000, 'probable', '2026-01-09T18:30:00', 'NEFT'),
+        // one-sided: mule3's own statement is not in the case — seen only from mule2's side
+        edge('e7', 'ext:mule3.kotak', 'ext:anita.sharma', 150000, 'external', '2026-01-07T15:45:00', 'IMPS'),
       ],
     }
   },

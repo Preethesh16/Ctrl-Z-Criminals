@@ -89,6 +89,15 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 17: officer-friendly round-trip visualization
+- User request: make round-tripping understandable to a low-level officer, with the 3 edge evidence tiers distinct and a separate round-trip column.
+- **3 edge styles**: solid = confirmed (same UTR both statements), dashed = probable (amount+time), dotted = one-sided/`external` (only one statement in case). `EdgeTier` type + EdgeDrawer wording + mock external edge (e7) added — backend already emitted `external`, the UI had been rendering it as solid (real gap, now fixed).
+- **Round-trip side column** (replaces the overlay cards): per-loop card with plain sentence (₹X left · ₹Y returned (Z%) after N hops in Th), numbered hop list, "▶ Watch the money move" button.
+- **Animation**: selected loop's edges turn red dashed with marching-ants dash-offset timer (80ms) + hop-number labels (1,2,3…) on white pills; everything else dims. "Show all round trips" header button highlights all loops at once.
+- Verified headless (two frames diff → dashes move; no page errors). Docker web rebuilt.
+- ⚠️ **Contract drift found after main merge**: `client.ts` on main now defaults to REAL mode (`VITE_API_MODE ?? "real"`) — mock dev needs explicit `VITE_API_MODE=mock npm run dev`. Presumably changed for the public deploy; keep in mind for demos.
+
+
 ### 2026-07-04 — Session 16: merge main ↔ branch + ⚠️ SECURITY: police data was on public GitHub
 - Pulled origin/main into `person-b/p4-review-account-report` (clean auto-merge; A's per-account disposition donut + my role tags coexist in GraphDrawers.tsx), then merged the branch back into main per user instruction.
 - **⚠️ CRITICAL FIND**: PR #5 (`person-c/money-trail`, commit 3db84b3) committed `tempData/258082779154.pdf` + `331087 CASA Account Statement_Report (44).xlsx` to the PUBLIC repo — SHA-256 verified byte-identical to files in the confidential `Bank-statements-dataset/`. Removed from the tip in 25c65c2, but **they remain in git history and on the `person-c/money-trail` remote branch** — needs team decision: history rewrite (git filter-repo) + delete that branch + consider making repo private / informing mentors. No code referenced tempData.

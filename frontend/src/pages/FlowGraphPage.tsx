@@ -100,8 +100,15 @@ function buildStylesheet(): cytoscape.StylesheetJson {
         width: 'data(width)',
         'line-color': COLORS.edge,
         'target-arrow-color': COLORS.edge,
+        // 3 evidence tiers, 3 line styles an officer can tell apart at a glance:
+        // solid = confirmed (same UTR both statements), dashed = probable
+        // (amount+time match), dotted = one-sided (only one statement in case)
         'line-style': (el: cytoscape.EdgeSingular) =>
-          el.data('tier') === 'probable' ? 'dashed' : 'solid',
+          el.data('tier') === 'probable'
+            ? 'dashed'
+            : el.data('tier') === 'external'
+              ? 'dotted'
+              : 'solid',
       },
     },
     {
@@ -111,6 +118,18 @@ function buildStylesheet(): cytoscape.StylesheetJson {
         'target-arrow-color': COLORS.loop,
         width: 6,
         'z-index': 10,
+        // marching-ants animation: dash pattern whose offset is advanced on a
+        // timer so the officer literally sees the money travel around the loop
+        'line-style': 'dashed',
+        'line-dash-pattern': [10, 5],
+        label: 'data(hopOrder)',
+        'font-size': 16,
+        'font-weight': 'bold',
+        color: COLORS.loop,
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 1,
+        'text-background-padding': '3px',
+        'text-background-shape': 'roundrectangle',
       },
     },
     {
@@ -130,7 +149,8 @@ export function FlowGraphPage() {
   const [graph, setGraph] = useState<CaseGraph | null>(null)
   const [notAnalyzed, setNotAnalyzed] = useState(false)
   const [roundTrips, setRoundTrips] = useState<RoundTrip[]>([])
-  const [showLoops, setShowLoops] = useState(false)
+  /** Which round trip is lit up: a loop_id, 'all', or null (none). */
+  const [activeLoop, setActiveLoop] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphEdgeData | null>(null)
 
@@ -213,26 +233,46 @@ export function FlowGraphPage() {
     }
   }, [graph])
 
-  // Round-trip highlighting.
+  // Round-trip highlighting + "money travelling" animation.
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass('loop-highlight loop-node dimmed')
-    if (!showLoops || roundTrips.length === 0) return
-    const loopNodeIds = new Set(roundTrips.flatMap((lp) => lp.path))
-    const loopEdgeKeys = new Set(
-      roundTrips.flatMap((lp) => lp.edges.map((e) => `${e.source}→${e.target}`)),
-    )
+    cy.edges().data('hopOrder', '')
+    if (!activeLoop || roundTrips.length === 0) return
+    const loops =
+      activeLoop === 'all' ? roundTrips : roundTrips.filter((lp) => lp.loop_id === activeLoop)
+    if (loops.length === 0) return
+
+    const loopNodeIds = new Set(loops.flatMap((lp) => lp.path))
+    // hop number per edge so the officer can follow 1 → 2 → 3 around the loop
+    const hopByEdge = new Map<string, number>()
+    for (const lp of loops) {
+      lp.edges.forEach((e, i) => hopByEdge.set(`${e.source}→${e.target}`, i + 1))
+    }
     cy.nodes().forEach((n) => {
       if (loopNodeIds.has(n.id())) n.addClass('loop-node')
       else n.addClass('dimmed')
     })
+    const highlighted: cytoscape.EdgeSingular[] = []
     cy.edges().forEach((e) => {
-      if (loopEdgeKeys.has(`${e.data('source')}→${e.data('target')}`))
+      const hop = hopByEdge.get(`${e.data('source')}→${e.data('target')}`)
+      if (hop !== undefined) {
+        e.data('hopOrder', String(hop))
         e.addClass('loop-highlight')
-      else e.addClass('dimmed')
+        highlighted.push(e)
+      } else {
+        e.addClass('dimmed')
+      }
     })
-  }, [showLoops, roundTrips, graph])
+    // marching ants: advance the dash offset so the flow direction is visible
+    let offset = 0
+    const timer = window.setInterval(() => {
+      offset -= 2
+      highlighted.forEach((e) => e.style('line-dash-offset', offset))
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [activeLoop, roundTrips, graph])
 
   const exportPng = useCallback(() => {
     const cy = cyRef.current
@@ -269,12 +309,12 @@ export function FlowGraphPage() {
           {graph && (
             <>
               <Button
-                variant={showLoops ? 'primary' : 'secondary'}
-                onClick={() => setShowLoops((v) => !v)}
+                variant={activeLoop === 'all' ? 'primary' : 'secondary'}
+                onClick={() => setActiveLoop((v) => (v === 'all' ? null : 'all'))}
                 disabled={roundTrips.length === 0}
                 title={roundTrips.length === 0 ? 'No round trips detected' : ''}
               >
-                {showLoops ? '● ' : ''}Show round trips ({roundTrips.length})
+                {activeLoop === 'all' ? '● ' : ''}Show all round trips ({roundTrips.length})
               </Button>
               <Button variant="secondary" onClick={exportPng}>
                 Export PNG
@@ -301,50 +341,87 @@ export function FlowGraphPage() {
         <p className="text-body text-text-secondary">Loading the money-flow graph…</p>
       )}
 
-      <div className={graph ? 'relative' : 'hidden'}>
-        <div
-          ref={containerRef}
-          className="card !p-0 h-[560px] w-full overflow-hidden"
-          data-testid="cy-container"
-        />
-        {showLoops && roundTrips.length > 0 && (
-          <div className="absolute top-4 left-4 w-72">
-            {roundTrips.map((lp) => (
-              <Card key={lp.loop_id} className="!p-4 mb-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="tag bg-danger-soft text-danger">Round trip</span>
-                  <span className="text-label text-text-secondary">
-                    score {lp.score.toFixed(1)}
-                  </span>
-                </div>
-                <p className="text-label text-text-secondary break-words">
-                  {lp.path.map((p) => p.replace('ext:', '')).join(' → ')}
-                </p>
-                <p className="text-body text-text-primary mt-1">
-                  {formatINR(lp.amount_out)} sent out · {formatINR(lp.amount_back)} came back (
-                  {lp.pct_returned}%) in {lp.elapsed_hours}h
-                </p>
-              </Card>
-            ))}
+      <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
+        <div className="relative flex-1 min-w-0">
+          <div
+            ref={containerRef}
+            className="card !p-0 h-[560px] w-full overflow-hidden"
+            data-testid="cy-container"
+          />
+          <div className="absolute bottom-4 left-4 card !p-3 text-label text-text-secondary flex flex-wrap gap-x-4 gap-y-1 max-w-[calc(100%-2rem)]">
+            <span>
+              <span className="inline-block text-primary mr-1 align-middle">★</span>
+              victim
+            </span>
+            <span>
+              <span className="inline-block w-3 h-3 rounded-pill bg-danger mr-1 align-middle" />
+              mule
+            </span>
+            <span>
+              <span className="inline-block w-3 h-3 rounded-pill bg-warning mr-1 align-middle" />
+              suspect
+            </span>
+            <span className="border-b-2 border-solid border-text-secondary self-center">
+              confirmed (same UTR)
+            </span>
+            <span className="border-b-2 border-dashed border-text-secondary self-center">
+              probable (amount + time)
+            </span>
+            <span className="border-b-2 border-dotted border-text-secondary self-center">
+              one-sided (single statement)
+            </span>
           </div>
-        )}
-        <div className="absolute bottom-4 left-4 card !p-3 text-label text-text-secondary flex gap-4">
-          <span>
-            <span className="inline-block text-primary mr-1 align-middle">★</span>
-            victim
-          </span>
-          <span>
-            <span className="inline-block w-3 h-3 rounded-pill bg-danger mr-1 align-middle" />
-            mule
-          </span>
-          <span>
-            <span className="inline-block w-3 h-3 rounded-pill bg-warning mr-1 align-middle" />
-            suspect / watch
-          </span>
-          <span className="border-b-2 border-dashed border-text-secondary self-center pb-0">
-            dashed = probable link
-          </span>
         </div>
+
+        {roundTrips.length > 0 && (
+          <aside className="w-80 shrink-0 max-h-[560px] overflow-y-auto">
+            <h2 className="text-card-title text-text-primary mb-2">
+              Round trips found ({roundTrips.length})
+            </h2>
+            <p className="text-label text-text-secondary mb-3">
+              Money that left an account and came back to it. Press "Watch the money move" —
+              the numbered arrows show each step.
+            </p>
+            {roundTrips.map((lp, idx) => {
+              const isActive = activeLoop === lp.loop_id
+              return (
+                <Card
+                  key={lp.loop_id}
+                  className={`!p-4 mb-3 ${isActive ? 'ring-2 ring-danger' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="tag bg-danger-soft text-danger">Round trip {idx + 1}</span>
+                    <span className="text-label text-text-secondary">
+                      score {lp.score.toFixed(1)}
+                    </span>
+                  </div>
+                  <p className="text-body text-text-primary mb-2">
+                    <span className="font-semibold">{formatINR(lp.amount_out)}</span> left ·{' '}
+                    <span className="font-semibold">{formatINR(lp.amount_back)}</span> returned (
+                    {lp.pct_returned}%) after {lp.hops} hops in {lp.elapsed_hours}h
+                  </p>
+                  <ol className="mb-3 flex flex-col gap-1">
+                    {lp.edges.map((e, i) => (
+                      <li key={i} className="text-label text-text-secondary flex gap-2">
+                        <span className="tag bg-danger-soft text-danger shrink-0">{i + 1}</span>
+                        <span className="break-all">
+                          {e.source.replace('ext:', '')} → {e.target.replace('ext:', '')} ·{' '}
+                          {formatINR(e.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                  <Button
+                    variant={isActive ? 'primary' : 'secondary'}
+                    onClick={() => setActiveLoop(isActive ? null : lp.loop_id)}
+                  >
+                    {isActive ? '■ Stop' : '▶ Watch the money move'}
+                  </Button>
+                </Card>
+              )
+            })}
+          </aside>
+        )}
       </div>
 
       <AnimatePresence>

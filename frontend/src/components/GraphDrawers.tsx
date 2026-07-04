@@ -194,10 +194,16 @@ export function EdgeDrawer({ edge, onClose }: { edge: GraphEdgeData; onClose: ()
               <span className="tag bg-success-soft text-success mr-1">Confirmed</span>
               The same reference number appears in both accounts' statements.
             </p>
-          ) : (
+          ) : edge.tier === 'probable' ? (
             <p className="text-text-primary">
               <span className="tag bg-warning-soft text-warning mr-1">Probable</span>
               Matched by amount and timing — request the counterparty statement to confirm.
+            </p>
+          ) : (
+            <p className="text-text-primary">
+              <span className="tag bg-primary-soft text-primary mr-1">One-sided</span>
+              Seen only in this account's statement — the other bank's statement is not in this
+              case. Request it to confirm where the money went.
             </p>
           )}
         </div>

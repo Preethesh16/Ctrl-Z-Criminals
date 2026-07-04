@@ -215,7 +215,13 @@ export interface GraphNodeData {
   suspicion: 'high' | 'medium' | 'low'
 }
 
-export type EdgeTier = 'confirmed' | 'probable'
+/**
+ * confirmed — same UTR/RRN seen in both accounts' statements
+ * probable  — matched by amount + timing across two uploaded statements
+ * external  — one-sided: seen only in one statement, the other bank's
+ *             statement is not in the case
+ */
+export type EdgeTier = 'confirmed' | 'probable' | 'external'
 
 export interface GraphEdgeData {
   id: string
