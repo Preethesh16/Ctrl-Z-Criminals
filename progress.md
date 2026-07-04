@@ -134,6 +134,14 @@ Walked all 6 screens headless-browser style as a non-technical officer. Fixed: d
 
 **@Person A — report accuracy bug for court documents**: the investigation-report evidence-chain table attributes `victim_hdfc.pdf` to "SBI · Suresh Patil" — an HDFC-styled statement getting bank=SBI from header-meta extraction. Cosmetic in the demo but a defence lawyer would pounce on it. Worth a look in `headermeta.py`.
 
+### 2026-07-04 (B) — post-ship addition: flow-graph role colors
+
+Flow Graph nodes are now colored by officer-facing role instead of raw suspicion: blue star = victim (clean own account sending the most money into suspicious hands — derived frontend-side from existing graph fields), red = mule (round-trip member / accumulator), amber = suspect/watch, grey = other. Legend + node-drawer role tags updated. Frontend-only, no contract change. On `person-b/p4-review-account-report`.
+
+### 2026-07-04 (B) — post-ship addition: review-step account column + review-report CSV/PDF
+
+On `person-b/p4-review-account-report` (not merged): review table + queue cards now show each transaction's account number (`account_ref`) and time-of-day when the statement has it, and the review step gained a "Generate review report" CSV download (account/date/time/debit/credit/balance/review-status per row) so officers can hand the finalised review to coworkers. Frontend-only, no contract change.
+
 _(Record any deviation from plan.md here, with date and reason.)_
 
 ### 2026-07-02 (A) — API contract v2 after reconciling with Person B's provisional types

@@ -18,7 +18,17 @@
 - Money = integer paise or string in API JSON, never float. Timestamps UTC stored, IST displayed.
 - `npm run build && npm run lint` before every commit.
 
-## Current state (updated: 2026-07-02, session 7)
+## Current state (updated: 2026-07-04, session 14)
+
+- **Review report now downloads as PDF** (user request): `reviewReport.ts` gained `downloadReviewReportPdf` — jsPDF + jspdf-autotable (new deps), landscape A4, case header + reviewed/pending/excluded tally + full transaction table (account, date, time, narration, channel, ref, debit, credit, balance, status), page-numbered footer, `review-report-<FIR>.pdf`. Review step now has two buttons: primary "⬇ Generate review report (PDF)" + secondary "CSV" (both share one paginated fetch, 20k cap). Verified headless: 111-row mock case → 4-page PDF, content checked via pdfplumber. **Docker web image rebuilt twice this session** — :3000 now serves the new review UI (account column + PDF/CSV report). ⚠️ Vite HMR does not fire for edits on /mnt/c under WSL — restart `npm run dev` after edits.
+- :3000 = Docker stack (real mode; contains `CEN/REALDATA/2026` = 161 docs / 192,662 txns of confidential police data — batch parser validation, never demo/screenshot it; analysis on it times out at nginx 60s and is conceptually wrong anyway: unrelated accounts). :3001 = local dev server (mock).
+
+## Previous state (2026-07-04, session 13)
+
+- **Branch `person-b/p4-review-account-report`** (not merged — user said don't touch main): review-step improvements for officer handoff. Review table now shows **Account No.** column (`account_ref`) and time-of-day under the date when the statement carries it; ReviewQueue cards show `A/c <ref> · date time`. New **"⬇ Generate review report"** button on the review step → client-side CSV (`src/lib/reviewReport.ts`): pages through all case transactions (500/page, 20k cap), columns = account, date, time, narration, channel, ref, debit, credit, balance, review status (REVIEWED / PENDING REVIEW / EXCLUDED), flags; UTF-8 BOM for Excel; filename `review-report-<FIR>.csv`. Build + lint clean.
+- Everything below (session 7) still holds — Phase 4 shipped, Docker verified.
+
+## Previous state (2026-07-02, session 7)
 
 - **Phase**: 4 — **ALL Person B tasks complete and Docker-verified** on `person-b/p4-reports-ship`. `docker compose up --build` tested end-to-end on this machine: 3 containers healthy, all 9 forge formats parsed **including scanned-PDF OCR inside the container**, round trip detected, all 3 exports downloaded through nginx, running on postgres. Checkpoint 4 = joint demo rehearsal + clean-clone repeat on a second machine.
 - **Docker how-to on this machine**: WSL integration is OFF but Windows Docker Desktop is reachable via `"/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" compose ...` from the repo root. (Editing Docker Desktop's settings-store.json is permission-blocked — use docker.exe or enable integration manually in the GUI.) Stack left RUNNING on http://localhost:3000 after this session.
@@ -78,6 +88,54 @@
 | 2026-07-01 | This file (`personB.md`) is the per-session context log; updated every prompt and pushed with the work | Keeps any AI session / teammate in sync without re-deriving context. |
 
 ## Session log (newest first)
+
+### 2026-07-04 — Session 19: "All accounts" panel on Flow Graph
+- Side column now opens with a searchable **All accounts (N)** list (role icon ★/red/amber/grey + in/out totals + txn count; sorted victim → mule → suspect → other, then by volume). Clicking a row = identical effect to tapping the node on canvas (`focusAccount` → setSelectedNode + `cy.animate(center)`): neighbourhood glow, green-in/red-out edges, drawer with Connected accounts. `deriveRoles` result lifted to a component-level `useMemo` shared by the canvas mount and the list.
+- Round-trips section moved below the accounts list in the same aside (aside now always renders with the graph).
+- Also this session (pre-feature): **local purge of leaked tempData objects** after the team's history rewrite — `git remote prune origin` + `reflog expire --expire=now --all` + `gc --prune=now`; verified commit 3db84b3 and both blobs unrecoverable locally; work backed up to `Hacathon/tracenet-backup-2026-07-04.tar.gz` (excludes dataset). Rebased session-18 commit onto rewritten history (`--onto`), realigned local main.
+- Verified headless: list renders sorted, list-click focuses + glows mule2 with correct drawer, search filter works. Build + lint clean; Docker web rebuilt.
+
+
+### 2026-07-04 — Session 18: node-click neighbourhood glow + connected-accounts drawer section
+- Click any graph node → blue halo on it, amber glow on every neighbour, incoming edges green / outgoing red, everything else dimmed (cytoscape `closedNeighborhood()` + `underlay-*` styles). Node focus takes priority over loop highlighting; both share one effect so classes never fight.
+- NodeDrawer gains "Connected accounts (N)": per-neighbour card (grouped from `graph.edges`, sorted by total volume) with ← received / → sent totals and each transfer's amount, date, channel, and tier tag (confirmed/probable/one-sided). Prop is optional so Dashboard's NodeDrawer usage (if any) is unaffected.
+- Dev-only test hook: `window.__cy` exposed under `import.meta.env.DEV` (headless canvas clicks are flaky; tests emit `tap` via the hook).
+- Verified headless on mock case (screenshot: mule1 focused → victim/mule2/mule3 glow, drawer lists 3 connections with correct directions). Build + lint clean; Docker web rebuilt.
+
+
+### 2026-07-04 — Session 17: officer-friendly round-trip visualization
+- User request: make round-tripping understandable to a low-level officer, with the 3 edge evidence tiers distinct and a separate round-trip column.
+- **3 edge styles**: solid = confirmed (same UTR both statements), dashed = probable (amount+time), dotted = one-sided/`external` (only one statement in case). `EdgeTier` type + EdgeDrawer wording + mock external edge (e7) added — backend already emitted `external`, the UI had been rendering it as solid (real gap, now fixed).
+- **Round-trip side column** (replaces the overlay cards): per-loop card with plain sentence (₹X left · ₹Y returned (Z%) after N hops in Th), numbered hop list, "▶ Watch the money move" button.
+- **Animation**: selected loop's edges turn red dashed with marching-ants dash-offset timer (80ms) + hop-number labels (1,2,3…) on white pills; everything else dims. "Show all round trips" header button highlights all loops at once.
+- Verified headless (two frames diff → dashes move; no page errors). Docker web rebuilt.
+- ⚠️ **Contract drift found after main merge**: `client.ts` on main now defaults to REAL mode (`VITE_API_MODE ?? "real"`) — mock dev needs explicit `VITE_API_MODE=mock npm run dev`. Presumably changed for the public deploy; keep in mind for demos.
+
+
+### 2026-07-04 — Session 16: merge main ↔ branch + ⚠️ SECURITY: police data was on public GitHub
+- Pulled origin/main into `person-b/p4-review-account-report` (clean auto-merge; A's per-account disposition donut + my role tags coexist in GraphDrawers.tsx), then merged the branch back into main per user instruction.
+- **⚠️ CRITICAL FIND**: PR #5 (`person-c/money-trail`, commit 3db84b3) committed `tempData/258082779154.pdf` + `331087 CASA Account Statement_Report (44).xlsx` to the PUBLIC repo — SHA-256 verified byte-identical to files in the confidential `Bank-statements-dataset/`. Removed from the tip in 25c65c2, but **they remain in git history and on the `person-c/money-trail` remote branch** — needs team decision: history rewrite (git filter-repo) + delete that branch + consider making repo private / informing mentors. No code referenced tempData.
+- Who is "person-c"? New contributor merged via PR #5 — two-person lane rules in CLAUDE.md don't cover them; raise at next sync.
+
+
+### 2026-07-04 — Session 15: flow-graph role colors (victim / mule / suspect)
+- User request: color nodes by role instead of abstract suspicion. Frontend-only (`FlowGraphPage.tsx` + `GraphDrawers.tsx`), no contract change: `deriveRoles(nodes, edges)` — mule = suspicion high (loop member/accumulator), suspect = medium, **victim = clean own-account sending the most money to mule/suspect nodes** (first heuristic — net outflow — failed on realistic data where victims have net inflow; edge-based version works on mock and forge shapes).
+- Victim renders as a **blue star** (colorblind-safe shape + color); mule red, suspect amber, other grey; own-account border moved to dark since blue now means victim. Legend = victim ★ / mule / suspect / dashed. NodeDrawer shows a role tag ("★ Likely victim account" / "Mule pattern" / "Suspect — under watch").
+- Verified headless on mock demo case (screenshot: star victim + 3 red mules + amber suspect). Docker web rebuilt — :3000 serves it. ⚠️ Ops gotcha: TWO stale vite instances can pile up on :3001/:3002 — `pkill -f "node_modules/.bin/vite"` before restarting; also verify served module with `curl localhost:3001/src/pages/<file> | grep <new symbol>`.
+
+
+### 2026-07-04 — Session 14: review report as PDF + Docker web rebuilds
+- Added PDF export for the review report (user request): jsPDF + jspdf-autotable client-side, same data path as the CSV (shared `fetchAllTransactions`, 500/page, 20k cap). Landscape A4, TraceNet header, FIR, generated-at IST, reviewed/pending/excluded tally, footer with page numbers. Buttons: "⬇ Generate review report (PDF)" (primary report action) + compact "CSV" beside it.
+- E2E-verified on the mock demo case via headless chromium: button click → `review-report-CEN_0042_2026.pdf`, 4 pages, text content validated with pdfplumber (header/tally/columns/footer all present).
+- Rebuilt Docker `web` image so the running :3000 stack serves the new review UI (account column from session 13 + this PDF button). Confirmed the served bundle contains the feature. Answered user questions: :3000 case `CEN/REALDATA/2026` = whole police dataset batch-parsed (161 docs, 192,662 txns) for extraction validation; analysis on it 504s (nginx 60s, synchronous analyze) and is per-complaint by design.
+- Gotcha recorded: Vite HMR misses file changes on /mnt/c (WSL 9p) — restart dev server after edits. Build + lint clean; branch `person-b/p4-review-account-report` pushed.
+
+### 2026-07-04 — Session 13: review-step account column + timings + review-report CSV
+- User request (police usability): review section didn't show which account a transaction belongs to. Branch `person-b/p4-review-account-report`, NOT merged to main per instruction.
+- Wizard review table: new "Account No." column (`account_ref` — last-12 of the document's account number, set by A's `extraction.py`); "Date & Time" column shows `txn_time` under the date when present (most bank CSVs omit times — only rows with HH:MM:SS in the narration carry one).
+- ReviewQueue cards: meta line now `A/c <ref> · date [time] · paid out/received ₹…`.
+- New `src/lib/reviewReport.ts` + "⬇ Generate review report" button on the review step: client-side CSV of the finalised review for coworker handoff — account/date/time/narration/channel/ref/debit/credit/balance/review-status/flags, paginates the real API (500/page, 20k-row cap with truncation note), UTF-8 BOM, `review-report-<FIR>.csv`. Errors surface inline; button shows "Preparing…" while fetching.
+- Build + lint clean. Also earlier this session: ran the real parser over `25078124219247-YASH DUBEY.csv` locally (10,875 txns, 0 balance breaks) — found header-meta (name/acct/period) not extracted for that layout and UPI counterparty names left empty / IMPS counterparty picking the bank code — flagged to user, fixes not yet requested (A's lane anyway).
 
 ### 2026-07-03 — Session 12: submission polish — README refresh
 - Pulled main (A fixed the last known real-data misparse — AU Bank layout; coverage now effectively 100%: 160/162, the 2 remainders contain no transactions; 69 tests).

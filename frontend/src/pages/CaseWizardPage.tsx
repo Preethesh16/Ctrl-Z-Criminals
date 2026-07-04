@@ -8,6 +8,7 @@ import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { formatDateIST, formatINR } from '../lib/format'
+import { downloadReviewReportCsv, downloadReviewReportPdf } from '../lib/reviewReport'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
 const STEPS = ['Upload', 'Review', 'Analyze'] as const
@@ -102,6 +103,7 @@ export function CaseWizardPage() {
       {step === 'Review' && (
         <ReviewStep
           caseId={caseId}
+          firNumber={caseData?.fir_number ?? null}
           page={txnPage}
           onChanged={refresh}
           onNext={() => setStep('Analyze')}
@@ -175,15 +177,20 @@ function AnalyzeStep({ caseId, disabled }: { caseId: string; disabled: boolean }
 
 function ReviewStep({
   caseId,
+  firNumber,
   page,
   onChanged,
   onNext,
 }: {
   caseId: string
+  firNumber: string | null
   page: Page<TransactionOut> | null
   onChanged: () => void
   onNext: () => void
 }) {
+  const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null)
+  const [exportError, setExportError] = useState(false)
+
   if (!page || page.total === 0) {
     return (
       <Card className="max-w-xl">
@@ -194,22 +201,57 @@ function ReviewStep({
     )
   }
 
+  async function generateReviewReport(format: 'pdf' | 'csv') {
+    setExporting(format)
+    setExportError(false)
+    try {
+      if (format === 'pdf') await downloadReviewReportPdf(caseId, firNumber)
+      else await downloadReviewReportCsv(caseId, firNumber)
+    } catch {
+      setExportError(true)
+    } finally {
+      setExporting(null)
+    }
+  }
+
   return (
     <motion.div variants={fadeIn} initial="hidden" animate="visible">
       <ReviewQueue caseId={caseId} onChanged={onChanged} />
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-body text-text-secondary">
           All {page.total} transactions read from the statements:
         </p>
-        <Button onClick={onNext}>Next: Analyze →</Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => generateReviewReport('pdf')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'pdf' ? 'Preparing PDF…' : '⬇ Generate review report (PDF)'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => generateReviewReport('csv')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'csv' ? 'Preparing…' : 'CSV'}
+          </Button>
+          <Button onClick={onNext}>Next: Analyze →</Button>
+        </div>
       </div>
+      {exportError && (
+        <p className="text-body text-danger mb-3">
+          Could not generate the review report — try again.
+        </p>
+      )}
 
       <div className="card !p-0 overflow-hidden">
         <table className="w-full text-body">
           <thead>
             <tr className="border-b border-border text-left">
-              <th className="px-4 py-3 text-label uppercase text-text-secondary">Date</th>
+              <th className="px-4 py-3 text-label uppercase text-text-secondary">Date &amp; Time</th>
+              <th className="px-4 py-3 text-label uppercase text-text-secondary">Account No.</th>
               <th className="px-4 py-3 text-label uppercase text-text-secondary">Narration</th>
               <th className="px-4 py-3 text-label uppercase text-text-secondary">Channel</th>
               <th className="px-4 py-3 text-label uppercase text-text-secondary text-right">
@@ -233,6 +275,14 @@ function ReviewStep({
               >
                 <td className="px-4 py-2 whitespace-nowrap text-text-primary">
                   {formatDateIST(t.txn_date)}
+                  {t.txn_time && (
+                    <span className="block text-label text-text-secondary tabular-nums">
+                      {t.txn_time}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2 whitespace-nowrap tabular-nums text-text-primary">
+                  {t.account_ref}
                 </td>
                 <td className="px-4 py-2 max-w-md truncate text-text-primary">
                   {t.narration_raw}
