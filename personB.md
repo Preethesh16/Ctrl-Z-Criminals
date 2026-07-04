@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 16: merge main ↔ branch + ⚠️ SECURITY: police data was on public GitHub
+- Pulled origin/main into `person-b/p4-review-account-report` (clean auto-merge; A's per-account disposition donut + my role tags coexist in GraphDrawers.tsx), then merged the branch back into main per user instruction.
+- **⚠️ CRITICAL FIND**: PR #5 (`person-c/money-trail`, commit 3db84b3) committed `tempData/258082779154.pdf` + `331087 CASA Account Statement_Report (44).xlsx` to the PUBLIC repo — SHA-256 verified byte-identical to files in the confidential `Bank-statements-dataset/`. Removed from the tip in 25c65c2, but **they remain in git history and on the `person-c/money-trail` remote branch** — needs team decision: history rewrite (git filter-repo) + delete that branch + consider making repo private / informing mentors. No code referenced tempData.
+- Who is "person-c"? New contributor merged via PR #5 — two-person lane rules in CLAUDE.md don't cover them; raise at next sync.
+
+
 ### 2026-07-04 — Session 15: flow-graph role colors (victim / mule / suspect)
 - User request: color nodes by role instead of abstract suspicion. Frontend-only (`FlowGraphPage.tsx` + `GraphDrawers.tsx`), no contract change: `deriveRoles(nodes, edges)` — mule = suspicion high (loop member/accumulator), suspect = medium, **victim = clean own-account sending the most money to mule/suspect nodes** (first heuristic — net outflow — failed on realistic data where victims have net inflow; edge-based version works on mock and forge shapes).
 - Victim renders as a **blue star** (colorblind-safe shape + color); mule red, suspect amber, other grey; own-account border moved to dark since blue now means victim. Legend = victim ★ / mule / suspect / dashed. NodeDrawer shows a role tag ("★ Likely victim account" / "Mule pattern" / "Suspect — under watch").
