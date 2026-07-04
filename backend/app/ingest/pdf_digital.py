@@ -155,21 +155,60 @@ def read_pdf_text_lines(path: str | Path, loose: bool = False) -> list[list]:
     return grid
 
 
+def _tables_packed_unexplodable(tables) -> bool:
+    """A page's table collapsed a whole page of rows into one, in a way
+    explode_multiline_rows cannot safely split: some cell packs 2+ dates,
+    but the cells DISAGREE on line counts (wrapped narration fragments are
+    interleaved), so no alignment exists. Seen in 717-page HDFC exports
+    where row rulings vanish mid-document. Cleanly-explodable rows (all
+    cells agree on N lines) are NOT packed — that's the normal HDFC case."""
+    from ..normalize.dates import parse_date
+
+    for t in tables:
+        for row in t:
+            parts = [str(c).split("\n") if c is not None else [] for c in row]
+            counts = [len(p) for p in parts if any(x.strip() for x in p)]
+            n = max(counts, default=1)
+            if n < 3:
+                continue
+            date_multi = any(
+                sum(1 for x in p if parse_date(x.strip())) >= 2 for p in parts
+            )
+            aligned = sum(1 for c in counts if c == n) >= 2
+            if date_multi and not aligned:
+                return True
+    return False
+
+
 def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
-    """Extract a unified cell grid from all pages; returns (grid, header_meta)."""
+    """Extract a unified cell grid from all pages; returns (grid, header_meta).
+
+    If ANY page's tables come back space-packed (whole page collapsed into
+    one row), table extraction can't be trusted for this document — the
+    whole file is re-read from its text layer instead (uniform 5-col grid,
+    downstream direction repair via balance deltas applies).
+    """
     grid: list[list] = []
     full_text_head = ""
+    packed = False
     with pdfplumber.open(path) as pdf:
         for pageno, page in enumerate(pdf.pages):
             if pageno == 0:
                 full_text_head = page.extract_text() or ""
             tables = page.extract_tables()
+            if tables and _tables_packed_unexplodable(tables):
+                packed = True
+                break
             if tables:
                 for t in tables:
                     grid.extend([[c for c in row] for row in t])
             else:
                 # regex fallback per text line → synthetic 5-col rows
                 # (with continuation-line narration capture)
+                collect_text_lines(page.extract_text() or "", grid)
+        if packed:
+            grid = []
+            for page in pdf.pages:
                 collect_text_lines(page.extract_text() or "", grid)
     meta = extract_header_meta(full_text_head)
     return explode_multiline_rows(grid), meta

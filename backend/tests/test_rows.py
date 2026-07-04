@@ -108,3 +108,24 @@ def test_repair_directions_from_balance():
     assert txns[2].direction == "DEBIT"
     assert txns[3].direction == "CREDIT"
     assert "direction_assumed" not in txns[1].problems
+
+
+def test_packed_unexplodable_tables_detected():
+    """717-page HDFC exports: pdfplumber collapses a page into one row where
+    the date cell packs N dates but narration packs MORE lines (wrapped
+    fragments) — unalignable, must trigger whole-doc text fallback."""
+    from app.ingest.pdf_digital import _tables_packed_unexplodable
+
+    packed = [[  # one table, one row: 3 dates vs 5 narration lines
+        "03/05/14\n04/05/14\n05/05/14",
+        "POS FOO\nPOSDEBIT\nATW BAR\nMOHALI\nATW BAZ",
+        "0.00\n1.00\n2.00",
+    ]]
+    assert _tables_packed_unexplodable([packed])
+
+    aligned = [[  # cleanly explodable (all cells agree on 3 lines) — NOT packed
+        "27/09/23\n28/09/23\n29/09/23",
+        "UPI-ONE\nUPI-TWO\nUPI-THREE",
+        "19.00\n0.00\n5.00",
+    ]]
+    assert not _tables_packed_unexplodable([aligned])

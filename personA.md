@@ -32,6 +32,14 @@
 
 ## Log
 
+### 2026-07-04 — Session 13: completeness audit + the packed-page fix (huge)
+- Built a **completeness audit**: for every file, compare extracted-txn count vs an independent count (date-prefixed lines in the PDF text layer / date-bearing grid rows). 111 files consistent; 34 flagged; triaged 22 of those as estimator false-alarms (19 banks print each txn across TWO date-prefixed lines → estimator counted double, verified on statement-49952935790.pdf; 3 estimator failures). **12 real suspects** identified.
+- Fixed the worst: `TARUN PILLAI statement.pdf` (717 pages, 2009→2026). Root cause: from page ~14, pdfplumber collapses each PAGE into one table row (date cell packs N dates, narration cell packs MORE lines — wrapped fragments — so explode_multiline_rows correctly refuses to split). Rows silently skipped → only 254/9,700 extracted, stopping Sep 2012.
+- Fix: `_tables_packed_unexplodable()` — detects a row whose date cell holds ≥2 dates but whose cells disagree on line counts (unalignable) → whole document re-read from the text layer. **Result: 254 → 9,700 rows, full 2009–2025 span, 6 balance breaks (0.1%)** — the near-perfect chain proves the rows are read correctly, and settles the true count at 9,700.
+- Collateral win: `STATEMENT (3).pdf` also switched paths → 1,818 → **2,604 rows, 0 breaks** (old explode path had silently missed ~786 rows there too).
+- No regressions: 001029700065_SOA unchanged (its 4 breaks remain document-side anomalies, both PDF layers agree — user cross-checking visually); statement-38347344323 12,087 rows/1 break. **71/71 tests** (regression test added for the detector).
+- Remaining real suspects (next): AccountStmt_0882 (2/221), AccountStmt_1228 (7/218), 8642666611469255 (69/666), 520698390475976 (-311), soa_ (-222), 8855611820 (-165), Bank statement (2)/(3) (-39 ea), shivlal (-13), KOMAL (-6), DEVANSHU (-6).
+
 ### 2026-07-02 — Session 9: the \b bug — misparse fixes on "worst offender" PDFs
 - Fixed three compounding extraction bugs found while chasing high balance-break files:
   1. **Continuation-line loss**: BoB-style layouts print the full UPI/IMPS reference on the NEXT line; fallback parser dropped it → refs truncated. Now non-amount lines append to the previous row's narration (`collect_text_lines`, guarded to 5-col regex rows only). Worst file: refs 0 → 2106/2214.
