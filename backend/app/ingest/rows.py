@@ -147,7 +147,14 @@ def grid_to_txns(
         debit, _ = parse_amount(_cell(row, mapping, "debit"))
         credit, _ = parse_amount(_cell(row, mapping, "credit"))
         amount_cell, amount_hint = parse_amount(_cell(row, mapping, "amount"))
-        balance, _ = parse_amount(_cell(row, mapping, "balance"))
+        # A "Dr" suffix on the BALANCE itself (not the transaction amount)
+        # means the account is overdrawn — the balance is negative, not a
+        # direction hint to discard. Only crosses the zero boundary rarely
+        # (current/business accounts), which is exactly when ignoring the
+        # sign silently breaks the running-balance chain.
+        balance, balance_hint = parse_amount(_cell(row, mapping, "balance"))
+        if balance is not None and balance_hint == "DEBIT":
+            balance = -balance
 
         problems: list[str] = []
         if debit and debit > 0:

@@ -279,8 +279,25 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
                 packed = True
                 break
             if tables:
-                for t in tables:
-                    grid.extend([[c for c in row] for row in t])
+                # pdfplumber sometimes "detects" fake tables that are really
+                # single transaction lines dumped whole into one cell (IDBI
+                # Bank's "Report" layout, faint ruling artifacts). Such a
+                # table only ever captures a FEW of the page's real lines —
+                # the rest sit as untouched page text. Once we see even one
+                # of these fakes, the page's table detection is proven
+                # unreliable: discard ALL of this page's table output and
+                # re-run full-text extraction instead, so nothing outside
+                # the fake tables' narrow view gets silently dropped.
+                fake_table_seen = any(
+                    len(row) == 1 and row[0]
+                    and (_LINE.match(str(row[0]).strip()) or _LINE_LOOSE.match(str(row[0]).strip()))
+                    for t in tables for row in t
+                )
+                if fake_table_seen:
+                    collect_text_lines(page.extract_text() or "", grid)
+                else:
+                    for t in tables:
+                        grid.extend([[c for c in row] for row in t])
             else:
                 # regex fallback per text line → synthetic 5-col rows
                 # (with continuation-line narration capture)

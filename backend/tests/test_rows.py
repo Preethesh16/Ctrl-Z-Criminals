@@ -131,6 +131,21 @@ def test_packed_unexplodable_tables_detected():
     assert not _tables_packed_unexplodable([aligned])
 
 
+def test_overdraft_dr_balance_stored_negative():
+    """A 'Dr' suffix on the BALANCE column (not the txn amount) means the
+    account is overdrawn — must be stored as a negative decimal, not
+    silently discarded. Uniform-sign errors are invisible until the
+    account crosses zero, which is exactly what broke on real data."""
+    grid = [
+        ["Tran_Date", "Narration", "Debit", "Credit", "Balance"],
+        ["11-03-2025", "UPI out", "27.25", "", "27.25 CR"],
+        ["11-03-2025", "SELF withdrawal", "135000.00", "", "134972.75 DR"],
+    ]
+    txns, _ = grid_to_txns(grid)
+    assert txns[0].balance == Decimal("27.25")
+    assert txns[1].balance == Decimal("-134972.75")
+
+
 def test_uco_bank_balance_delta_extraction():
     """UCO Bank: overlapping letterhead corrupts the debit/credit columns,
     amount wraps onto its own bare line, but balance is reliable on every

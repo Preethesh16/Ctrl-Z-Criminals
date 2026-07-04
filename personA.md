@@ -47,6 +47,13 @@
 - Honest caveat documented in code comments: for this template FD-07 balance-checks verify the *balance* column only (read independently) — amount is *derived* from it, so it can't independently catch an amount error the way it does elsewhere. The GRAND TOTAL cross-check is what actually proves correctness here.
 - 72/72 tests (1 new). Next: 8642666611469255, 520698390475976, soa_, 8855611820, Bank statement (2)/(3), shivlal, KOMAL, DEVANSHU.
 
+### 2026-07-04 — Session 15: 8642666611469255.pdf — three bugs, one file
+- **Bug 1**: pdfplumber "detects" fake single-cell tables (a whole transaction line dumped as one unsplit string) on IDBI Bank's "Report" layout. Fix: re-parse a single-cell table row through `_LINE`/`_LINE_LOOSE` before trusting it as real columns.
+- **Bug 2 (bigger)**: once a page has ANY real+fake table mix, only the fake tables' narrow content was kept — the majority of each page's actual text sat outside any detected table and was silently discarded (69/666 rows, most pages losing ~90% of their content). Fix: once a fake single-cell table is spotted on a page, distrust that page's table detection entirely and re-run full-text extraction on it instead. 69 → 652 rows.
+- **Bug 3 (root-cause, shared code)**: 22 balance breaks remained, all with the exact signature `expected == -actual`. Root cause: a "Dr" suffix on the BALANCE column itself (not the transaction amount) means the account is overdrawn — the balance is genuinely negative — but `grid_to_txns` was discarding that sign and always storing balance as a positive magnitude. This stays silently self-consistent until the account crosses zero into overdraft, which is exactly where all 22 breaks clustered (this account swings to -₹1.3L+ in a few places). Fixed in the shared `rows.py` balance-parsing line (benefits any future file with an overdraft-capable account, not just this one).
+- **652 rows, 0 breaks** (was 69, doc-estimate ~666). Verified the fix doesn't disturb any prior work: spot-checked `SOA`, `TARUN`, `STATEMENT (3)`, both `AccountStmt` files — all unchanged. 73/73 tests (2 new).
+- Remaining: 520698390475976, soa_, 8855611820, Bank statement (2)/(3), shivlal, KOMAL, DEVANSHU — 7 files.
+
 ### 2026-07-02 — Session 9: the \b bug — misparse fixes on "worst offender" PDFs
 - Fixed three compounding extraction bugs found while chasing high balance-break files:
   1. **Continuation-line loss**: BoB-style layouts print the full UPI/IMPS reference on the NEXT line; fallback parser dropped it → refs truncated. Now non-amount lines append to the previous row's narration (`collect_text_lines`, guarded to 5-col regex rows only). Worst file: refs 0 → 2106/2214.
