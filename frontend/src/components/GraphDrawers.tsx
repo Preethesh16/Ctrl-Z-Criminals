@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { api, ApiError } from '../api/client'
 import type { Disposition, GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
-import type { NodeConnection } from '../pages/FlowGraphPage'
+import type { NodeConnection } from '../lib/graphRoles'
 import { explainFlag, flagLabel } from '../lib/flagExplanations'
 import { formatDateIST, formatINR } from '../lib/format'
 import { DispositionDonut } from '../pages/DashboardPage'
@@ -50,11 +50,13 @@ export function NodeDrawer({
   caseId,
   node,
   connections = [],
+  onDownloadPdf,
   onClose,
 }: {
   caseId: string
   node: GraphNodeData & { role?: string }
   connections?: NodeConnection[]
+  onDownloadPdf?: () => void
   onClose: () => void
 }) {
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null)
@@ -99,6 +101,15 @@ export function NodeDrawer({
         )}
         {node.own_account && <span className="tag bg-primary-soft text-primary">Statement uploaded</span>}
       </div>
+
+      {onDownloadPdf && (
+        <button
+          onClick={onDownloadPdf}
+          className="mb-4 rounded-control border border-border px-3 py-2 text-body text-text-primary hover:bg-background transition-colors"
+        >
+          ⬇ PDF report for this account
+        </button>
+      )}
 
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="card !p-3">
