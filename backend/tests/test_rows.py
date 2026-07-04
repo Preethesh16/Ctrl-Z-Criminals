@@ -246,3 +246,31 @@ def test_orphan_amount_recovery_requires_withdrawal_context():
     assert txns[0].direction == "DEBIT"
     assert txns[0].amount == Decimal("200.00")
     assert info["skipped"] == 1
+
+
+def test_fake_table_requires_whole_table_fragments_not_one_stray_row():
+    """A single ordinary wrapped continuation cell (e.g. a NEFT reference
+    number split onto its own line) inside an otherwise well-formed,
+    multi-row table must NOT trigger the whole-page fallback — that was
+    a real dataset-wide regression (NEFT channel count dropped ~10,000
+    rows because 'NEFT' is one of the fragment markers, and any legit
+    table with a wrapped NEFT reference got wrongly discarded). Only a
+    table where EVERY row is a lone fragment cell (no real structure at
+    all) is evidence of a broken page."""
+    from app.ingest.pdf_digital import _table_is_all_fragments
+
+    # a normal 5-column table with one harmless stray continuation row
+    good_table_with_stray_row = [
+        ["21-05-2025", "NEFT/HDFCH00194045111/AISHW", "", "34,000.00", "34,296.00"],
+        ["NEFTMBAXMB210503613383AISH"],  # wrapped reference, no amount — NORMAL
+        ["22-05-2025", "UPI/CR/123", "", "5,000.00", "39,296.00"],
+    ]
+    assert not _table_is_all_fragments(good_table_with_stray_row)
+
+    # the actual Kotak signature: EVERY row is a lone fragment, no structure at all
+    all_fragment_table = [
+        ["SentIMPS407719023087PRA"],
+        ["YASH/BARBX0825/KKBKTrans"],
+        ["UPI/PRADEEP Moha"],
+    ]
+    assert _table_is_all_fragments(all_fragment_table)

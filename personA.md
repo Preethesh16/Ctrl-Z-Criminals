@@ -72,6 +72,14 @@
 - **The suspect list from the completeness audit is now fully closed.** Only remaining known gap in the whole dataset: `520698390475976`'s documented column-shift limitation (20/111 pages, still ~76 rows short) — deliberately not hand-hacked, per the earlier decision (wrong guesses there risk assigning incorrect amounts to real transactions, worse than a clean skip).
 - 77/77 tests (2 new this session). Every fix cross-verified against the full set of previously-fixed files before committing — caught one real regression before it shipped.
 
+### 2026-07-04 — Session 19: caught a SECOND, dataset-wide regression the per-file checklist couldn't see
+- Ran the full `validate_dataset.py` pass (not just the per-file regression list) after session 18's fixes, as final due diligence. Total dropped 204,487→190,395 and NEFT channel collapsed 15,000→4,763 — a real ~14,000-row regression that every one of my ~15 hand-picked spot-check files had completely missed.
+- Root cause: the Kotak fake-table fix (session 17) checked for a fragment marker on ANY single row anywhere on a page. "NEFT" is one of those markers, and an ordinary WRAPPED NEFT reference number inside an otherwise perfectly well-formed table ("NEFTMBAXMB210503613383AISH" — real, correct data, just line-wrapped) matched it — one normal stray continuation row was enough to discard an entire good table across many files nationwide.
+- Fix: require the WHOLE table to be composed of lone fragment cells (the actual Kotak signature — 2-3 row tables with zero real column structure), not just one row anywhere on the page. Promoted the check from a local closure to module-level `_is_fragment_cell`/`_table_is_all_fragments` so it's directly unit-testable.
+- **Verified via full dataset re-run** (the only way this class of bug shows up): 190,395 → **201,441** total (+11,046), NEFT 4,763 → **15,316** (back to expected level). Every one of the 15 previously-fixed files re-confirmed unchanged at exact baseline. 78/78 tests.
+- **Standing lesson, now explicit in code comments**: any change to page-level "trust this table or not" logic MUST be validated with a full `validate_dataset.py` pass, not just the accumulated per-file regression checklist — a systemic bug can hide from every file you already know to check.
+- **Current honest total: 201,441 transactions, 160/162 files (2 verified genuinely empty), 0 crashes.** Only remaining known gap: `520698390475976`'s documented 20/111-page column-shift limitation (~76 rows).
+
 ### 2026-07-02 — Session 9: the \b bug — misparse fixes on "worst offender" PDFs
 - Fixed three compounding extraction bugs found while chasing high balance-break files:
   1. **Continuation-line loss**: BoB-style layouts print the full UPI/IMPS reference on the NEXT line; fallback parser dropped it → refs truncated. Now non-amount lines append to the previous row's narration (`collect_text_lines`, guarded to 5-col regex rows only). Worst file: refs 0 → 2106/2214.

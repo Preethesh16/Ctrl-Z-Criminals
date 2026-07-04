@@ -113,6 +113,30 @@ _HAS_AMOUNT = re.compile(r"\d[\d,]*\.\d{2}")
 _FRAGMENT_MARKERS = re.compile(r"/|UPI|IMPS|NEFT|RTGS|CHQ|ATW|POS|TRTR", re.IGNORECASE)
 
 
+def _is_fragment_cell(cell) -> bool:
+    """A lone cell that looks like a wrapped bank-narration fragment
+    (contains a transfer marker, carries no amount) rather than a
+    legitimate customer-info value (email, plain account number, a
+    split name) — those share the "no amount" shape but never contain
+    transfer markers."""
+    s = str(cell).strip()
+    return bool(s) and bool(_FRAGMENT_MARKERS.search(s)) and not _HAS_AMOUNT.search(s)
+
+
+def _table_is_all_fragments(table: list) -> bool:
+    """True only when EVERY row in the table is a lone fragment cell —
+    the actual signature of a broken page (Kotak: 2-3 row 'tables' with
+    zero real structure). A single stray wrapped-reference row inside an
+    otherwise well-formed multi-column table is NORMAL and must not
+    trigger this — an earlier per-ROW version of this check caused a
+    ~14,000-row, dataset-wide undercount (mostly NEFT-channel, since
+    "NEFT" is one of the transfer markers and ordinary wrapped NEFT
+    references are common in otherwise-fine tables)."""
+    return bool(table) and all(
+        len(row) == 1 and row[0] and _is_fragment_cell(row[0]) for row in table
+    )
+
+
 _LONE_AMOUNT = re.compile(rf"^{_AMT}$")
 
 
@@ -303,18 +327,29 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
                 # specifically is a bank-transfer marker like "/", "UPI",
                 # "IMPS" — narrations look like this, customer-info cells
                 # never do.
-                def _is_fragment(cell) -> bool:
-                    s = str(cell).strip()
-                    return bool(s) and bool(_FRAGMENT_MARKERS.search(s)) and not _HAS_AMOUNT.search(s)
-
+                #
+                # SECOND regression, same root cause at a different scope:
+                # a per-ROW fragment check (any single fragment-shaped cell
+                # ANYWHERE on the page) fires on a perfectly ordinary wrapped
+                # NEFT reference inside an otherwise well-formed table
+                # ("NEFTMBAXMB210503613383AISH" — real, correct data, just
+                # wrapped). One stray continuation row is NORMAL in a good
+                # table. The actual Kotak pattern is a table with NO real
+                # structure at all — every single row in it is a lone
+                # fragment cell. Require that whole-table signature, not a
+                # single row anywhere on the page (caused a ~14k-row,
+                # dataset-wide undercount, mostly NEFT-channel, before this
+                # narrowing — a lesson to re-run the FULL validate_dataset.py
+                # pass, not just the per-file regression list, after any
+                # change to page-level trust logic). See module-level
+                # _is_fragment_cell / _table_is_all_fragments.
                 fake_table_seen = any(
                     len(row) == 1 and row[0] and (
                         _LINE.match(str(row[0]).strip())
                         or _LINE_LOOSE.match(str(row[0]).strip())
-                        or _is_fragment(row[0])
                     )
                     for t in tables for row in t
-                )
+                ) or any(_table_is_all_fragments(t) for t in tables)
                 if fake_table_seen:
                     collect_text_lines(page.extract_text() or "", grid)
                 else:
