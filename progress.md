@@ -134,6 +134,10 @@ Walked all 6 screens headless-browser style as a non-technical officer. Fixed: d
 
 **@Person A — report accuracy bug for court documents**: the investigation-report evidence-chain table attributes `victim_hdfc.pdf` to "SBI · Suresh Patil" — an HDFC-styled statement getting bank=SBI from header-meta extraction. Cosmetic in the demo but a defence lawyer would pounce on it. Worth a look in `headermeta.py`.
 
+### 2026-07-05 (B) — deviation: Golden Hour feature removed on user decision
+
+The Golden Hour board (freeze-status cards + Section 94 BNSS summons modal, plan.md §5.2 / Person B P4 task) has been removed from the product entirely — `GoldenHourBoard.tsx` deleted, Dashboard block dropped. Officer freeze state only ever lived in localStorage, so no data migration. The P4 checkbox above remains ticked as a record that it was built and verified before removal.
+
 ### 2026-07-04 (B) — post-ship addition: flow-graph role colors
 
 Flow Graph nodes are now colored by officer-facing role instead of raw suspicion: blue star = victim (clean own account sending the most money into suspicious hands — derived frontend-side from existing graph fields), red = mule (round-trip member / accumulator), amber = suspect/watch, grey = other. Legend + node-drawer role tags updated. Frontend-only, no contract change. On `person-b/p4-review-account-report`.

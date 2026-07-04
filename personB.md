@@ -89,6 +89,10 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 26: Golden Hour removed (user request)
+- Deleted `components/GoldenHourBoard.tsx` and its Dashboard usage (import + analyzed-gated block). Nothing else touched. Confirmed zero "golden hour" strings in the served bundle; freeze statuses only ever lived in localStorage (`tracenet.freeze.<caseId>`) so no backend/data cleanup needed. Deviation from plan.md §5.2 recorded in progress.md. Build + lint clean; Docker web rebuilt; pushed.
+
+
 ### 2026-07-05 — Session 25: Excel reports now mirror the PDFs (user-reported mismatch)
 - User: "excel doesn't contain all the data in the pdf". Diagnosis: data WAS complete but split across sheet tabs — workbook opened on the small Summary sheet, so it looked empty vs the PDF. Fix: every workbook's **first sheet is now "Report"** — title, summary block, then every section stacked vertically in PDF order (same content as the PDF, no tab-hunting). Per-section sheets (Transactions/Accounts/Round trips/Trail/Disposition) kept after it for sorting/filtering.
 - Applied to all four client-side workbooks (review, flow graph, money trail, visual analysis) via `reportSheet()`/aoa stacking in analysisXlsx.ts + reviewReport.ts. Verified: review Report sheet = 123 rows (summary + all 111 txns), graph = 22 (all sections), trail = 16. Build + lint clean; Docker web rebuilt; pushed.
