@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, exportDownloadUrl, IS_MOCK_MODE } from '../api/client'
+import { exportDownloadUrl } from '../api/client'
 import type { CaseOut, ExportKind } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -32,8 +32,20 @@ export function ReportPage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
 
+  async function loadRealCases() {
+    const response = await fetch('/api/cases')
+    if (!response.ok) throw new Error(await response.text())
+    return response.json() as Promise<CaseOut[]>
+  }
+
+  async function loadRealReportPreview(selectedCaseId: string) {
+    const response = await fetch(`/api/cases/${selectedCaseId}/report/preview`)
+    if (!response.ok) throw new Error(await response.text())
+    return response.text()
+  }
+
   useEffect(() => {
-    api.listCases().then(setCases).catch(() => setCases([]))
+    loadRealCases().then(setCases).catch(() => setCases([]))
   }, [])
 
   useEffect(() => {
@@ -46,7 +58,7 @@ export function ReportPage() {
     if (!caseId) return
     setPreviewHtml(null)
     setPreviewFailed(false)
-    api.getReportPreviewHtml(caseId).then(setPreviewHtml).catch(() => setPreviewFailed(true))
+    loadRealReportPreview(caseId).then(setPreviewHtml).catch(() => setPreviewFailed(true))
   }, [caseId])
 
   return (
@@ -112,20 +124,15 @@ export function ReportPage() {
               <Card key={d.kind} className="!p-4">
                 <div className="text-card-title text-text-primary mb-1">{d.label}</div>
                 <p className="text-label text-text-secondary mb-3">{d.description}</p>
-                {IS_MOCK_MODE ? (
-                  <Button disabled title="Downloads need the real server (VITE_API_MODE=real)">
-                    Download (server required)
-                  </Button>
-                ) : (
-                  <a href={exportDownloadUrl(caseId, d.kind)} download>
-                    <Button>Download</Button>
-                  </a>
-                )}
+                <a href={exportDownloadUrl(caseId, d.kind)} download>
+                  <Button>Download</Button>
+                </a>
               </Card>
             ))}
             <p className="text-label text-text-secondary">
               Every download is recorded in the case audit log with its file size — the evidence
-              chain stays intact.
+              chain stays intact. If the backend is reachable, the download works even when the
+              frontend is running in mock mode.
             </p>
           </div>
         </div>
