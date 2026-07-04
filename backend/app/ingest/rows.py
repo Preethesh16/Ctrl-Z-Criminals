@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from ..normalize.amounts import parse_amount
+from ..normalize.amounts import parse_amount, parse_balance_amount
 from ..normalize.channel import classify_channel
 from ..normalize.dates import parse_date, parse_time
 from ..normalize.reference import extract_counterparty, extract_reference
@@ -147,7 +147,7 @@ def grid_to_txns(
         debit, _ = parse_amount(_cell(row, mapping, "debit"))
         credit, _ = parse_amount(_cell(row, mapping, "credit"))
         amount_cell, amount_hint = parse_amount(_cell(row, mapping, "amount"))
-        balance, _ = parse_amount(_cell(row, mapping, "balance"))
+        balance = parse_balance_amount(_cell(row, mapping, "balance"))
 
         problems: list[str] = []
         if debit and debit > 0:

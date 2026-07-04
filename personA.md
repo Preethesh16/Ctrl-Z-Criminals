@@ -41,6 +41,19 @@
 - Final validation: **160/162, 195,041 txns, 0 crashes**; channel classification improved (UNKNOWN −2.1k, refs recovered feed NEFT/IMPS/CHEQUE up). 69/69 tests.
 - Lane A closed. **Final balance-audit: 112/148 balance-bearing docs reconcile perfectly (was 78 at first measurement); of the 36 with breaks, all but one are ≤8.5% break-rate (statement quirks FD-07 correctly surfaces).**
 
+### 2026-07-04 — Session 12: per-account disposition (closed a real UX gap)
+- User asked "the disposition donut — victim's account or suspect's?" — correct question, exposed a real gap: `GET /cases/{id}/disposition` only ever computed case-wide, blending victim + every mule into one meaningless average. Officers clicking a specific mule node in the flow graph had no way to see THAT account's cash/redirect/merchant split.
+- Backend: added optional `account_ref` query param to the endpoint — when given, runs the existing (already account-agnostic) `disposition()` function against just that account's debits; 404 for unknown/pure-receiver accounts. Case-wide behavior unchanged (no breaking change).
+- Frontend: exported `DispositionDonut` + `BUCKET_META` from DashboardPage (were private) and reused them in `GraphDrawers.tsx`'s `NodeDrawer` — clicking any account node now shows "Where this account's money went" with its own breakdown. Mock adapter updated to compute per-account too (was static numbers regardless of which account), so dev/demo mode shows real per-account variation.
+- Verified live on the forge case: mule `004081355954` → 87.3% redirected onward (pass-through mule); `005171951188` → 100% merchant spend. Confirms the donut now tells genuinely different investigative stories per account.
+- New regression test (`test_disposition_per_account_differs_from_case_wide`) asserts per-account breakdowns actually differ from each other and from the case-wide number — guards against this gap reopening silently. 70/70 backend tests, frontend typecheck + build clean (had to `npm install` — deps from Deepthi's merges weren't installed in this checkout).
+
+### 2026-07-03 — Session 11: .env setup + Neon connection verified
+- Created `backend/.env.example` (was documented in dbguide.md but never actually committed) and the real `backend/.env` (git-ignored — confirmed via `git status --ignored` before touching anything).
+- Wired `.env` to the team's Neon Postgres project (ap-southeast-1) with a freshly generated `SECRET_KEY`. **Live connection verified**: `SELECT version()` → PostgreSQL 18.4.
+- Found and fixed a real driver mismatch: `requirements.txt` only had `psycopg2-binary` (Docker Compose's internal DB uses `postgresql+psycopg2://`) but the config default / dbguide / Neon setup all use `postgresql+psycopg://` (psycopg3 dialect) — the two schemes need different drivers. Added `psycopg[binary]` alongside `psycopg2-binary` rather than swapping, so Deepthi's already-verified Docker path stays untouched while Neon dev connections work too. 69/69 tests still pass after reinstall.
+- ⚠️ Note for whoever reads this: the Neon password was pasted in plaintext during setup chat — flagged for rotation (Neon dashboard → Settings → Reset password). Real `.env` values are never committed or read back by Claude Code (settings.json denies it); validated indirectly via the app's own config loader instead.
+
 ### 2026-07-03 — Session 10: soa fixed (last known misparse)
 - `soa_0167042251865512.pdf` (AU Bank web export, 222 pages): txn lines carry `amount rate lcy_amount` with the TRUE balance alone on the next line — parser took the LCY duplicate as balance (97.6% breaks). Fix in `collect_text_lines`: lone-amount follow-up line becomes the row's balance; when the captured balance equalled the amount (LCY duplicate), the middle rate column is dropped as noise. Result: **4.3% breaks, full balance chain, 642 credits repaired, refs extracted.** 69/69 tests. No known systematic misparses remain.
 

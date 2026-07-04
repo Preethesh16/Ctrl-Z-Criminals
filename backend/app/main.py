@@ -444,8 +444,23 @@ def case_correlation(case_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/cases/{case_id}/disposition")
-def case_disposition(case_id: str, db: Session = Depends(get_db)):
-    return _artifact(db, case_id, "disposition")
+def case_disposition(case_id: str, account_ref: str | None = None, db: Session = Depends(get_db)):
+    """Disposition breakdown — case-wide by default, or scoped to one account.
+
+    Officers need both: the case-wide number for the dashboard, and a
+    per-account number when they click a node in the flow graph (e.g.
+    "65% of what passed through THIS mule account came out as cash").
+    """
+    if account_ref is None:
+        return _artifact(db, case_id, "disposition")
+
+    from .detection.disposition import disposition
+
+    txns = db.scalars(select(Transaction).where(
+        Transaction.case_id == case_id, Transaction.account_ref == account_ref)).all()
+    if not txns:
+        raise HTTPException(404, f"no transactions found for account {account_ref!r} in this case")
+    return disposition(txns)
 
 
 @app.get("/cases/{case_id}/trail/{txn_id}")

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { api } from '../api/client'
-import type { GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
+import { api, ApiError } from '../api/client'
+import type { Disposition, GraphEdgeData, GraphNodeData, TransactionOut } from '../api/types'
 import { explainFlag, flagLabel } from '../lib/flagExplanations'
 import { formatDateIST, formatINR } from '../lib/format'
+import { DispositionDonut } from '../pages/DashboardPage'
 import { transitions } from '../theme/motion'
 
 const drawerMotion = {
@@ -54,17 +55,28 @@ export function NodeDrawer({
   onClose: () => void
 }) {
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null)
+  const [disposition, setDisposition] = useState<Disposition | null>(null)
 
   useEffect(() => {
     // External counterparties have no rows of their own; only own accounts do.
     if (!node.own_account) {
       setTransactions([])
+      setDisposition(null)
       return
     }
     api
       .listTransactions(caseId, { limit: 200 })
       .then((page) => setTransactions(page.items.filter((t) => t.account_ref === node.id)))
       .catch(() => setTransactions([]))
+
+    setDisposition(null)
+    api
+      .getDisposition(caseId, node.id)
+      .then(setDisposition)
+      // 404 just means this account has no debits (pure receiver) — not an error to show.
+      .catch((e) => {
+        if (!(e instanceof ApiError && e.status === 404)) console.error(e)
+      })
   }, [caseId, node])
 
   const flagged = (transactions ?? []).filter((t) => t.flags.length > 0)
@@ -99,6 +111,13 @@ export function NodeDrawer({
           </div>
         </div>
       </div>
+
+      {node.own_account && disposition && (
+        <div className="mb-6">
+          <h3 className="text-card-title text-text-primary mb-2">Where this account's money went</h3>
+          <DispositionDonut disposition={disposition} size={160} />
+        </div>
+      )}
 
       {!node.own_account ? (
         <p className="text-body text-text-secondary">

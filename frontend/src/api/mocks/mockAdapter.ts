@@ -540,21 +540,56 @@ export const mockAdapter = {
     ]
   },
 
-  async getDisposition(caseId: string): Promise<Disposition> {
+  async getDisposition(caseId: string, accountRef?: string): Promise<Disposition> {
     await delay(200)
     if (!analyzedCases.has(caseId))
       throw new ApiError(404, 'no disposition yet — run POST /cases/{id}/analyze first')
-    return {
-      total_debits: '1250000.00',
-      buckets: {
-        cash: { amount: '500000.00', pct: 40.0 },
-        cheque: { amount: '75000.00', pct: 6.0 },
-        redirected: { amount: '550000.00', pct: 44.0 },
-        merchant: { amount: '87500.00', pct: 7.0 },
-        internal: { amount: '0.00', pct: 0.0 },
-        unclassified: { amount: '37500.00', pct: 3.0 },
-      },
+
+    if (!accountRef) {
+      return {
+        total_debits: '1250000.00',
+        buckets: {
+          cash: { amount: '500000.00', pct: 40.0 },
+          cheque: { amount: '75000.00', pct: 6.0 },
+          redirected: { amount: '550000.00', pct: 44.0 },
+          merchant: { amount: '87500.00', pct: 7.0 },
+          internal: { amount: '0.00', pct: 0.0 },
+          unclassified: { amount: '37500.00', pct: 3.0 },
+        },
+      }
     }
+
+    // Per-account view (flow-graph node drawer): compute from that
+    // account's own mock debits so different nodes show different numbers.
+    const CHANNEL_BUCKET: Record<string, keyof Disposition['buckets']> = {
+      ATM: 'cash', CASH: 'cash', CHEQUE: 'cheque',
+      UPI: 'redirected', NEFT: 'redirected', IMPS: 'redirected', RTGS: 'redirected',
+      POS: 'merchant', INTERNAL: 'internal',
+    }
+    const txns = (transactionsByCase.get(caseId) ?? []).filter(
+      (t) => t.account_ref === accountRef && t.direction === 'DEBIT' && !t.excluded,
+    )
+    if (txns.length === 0)
+      throw new ApiError(404, `no transactions found for account ${accountRef} in this case`)
+
+    const totals: Record<keyof Disposition['buckets'], number> = {
+      cash: 0, cheque: 0, redirected: 0, merchant: 0, internal: 0, unclassified: 0,
+    }
+    let total = 0
+    for (const t of txns) {
+      const bucket = CHANNEL_BUCKET[t.channel] ?? 'unclassified'
+      const amount = Number(t.amount_inr)
+      totals[bucket] += amount
+      total += amount
+    }
+    const buckets = Object.fromEntries(
+      (Object.keys(totals) as Array<keyof Disposition['buckets']>).map((key) => [
+        key,
+        { amount: totals[key].toFixed(2), pct: total ? Math.round((totals[key] / total) * 1000) / 10 : 0 },
+      ]),
+    ) as Disposition['buckets']
+
+    return { total_debits: total.toFixed(2), buckets }
   },
 
   async getTrail(caseId: string, txnId: string, stopRule: TrailStopRule = 'tranche'): Promise<Trail> {

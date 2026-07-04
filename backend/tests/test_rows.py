@@ -66,6 +66,22 @@ def test_dash_separated_headers():
     assert txns[0].amount == Decimal("17.91")
 
 
+def test_balance_amount_header_not_claimed_as_generic_amount():
+    grid = [
+        ["TRAN DATE", "TRAN PARTICULAR", "DEBIT AMOUNT", "CREDIT AMOUNT", "BALANCE AMOUNT"],
+        ["25-Apr-25", "IMPS/P2A/511520930733/JAKA/M S", "", "100000.00", "100000.00"],
+        ["25-Apr-25", "API Indus POS Installation Fee PSF", "1178.82", "", "98821.18"],
+    ]
+    txns, info = grid_to_txns(grid)
+    assert info["mapping"]["balance"] == 4
+    assert "amount" not in info["mapping"]
+    assert len(txns) == 2
+    assert txns[0].direction == "CREDIT"
+    assert txns[0].balance == Decimal("100000.00")
+    assert txns[1].direction == "DEBIT"
+    assert txns[1].balance == Decimal("98821.18")
+
+
 def test_multiline_cell_explosion():
     """HDFC-style PDFs pack many txns per cell, newline-separated."""
     from app.ingest.pdf_digital import explode_multiline_rows
