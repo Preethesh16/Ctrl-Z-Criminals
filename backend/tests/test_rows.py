@@ -201,3 +201,25 @@ def test_fake_table_fragment_detection_narrow():
     assert not is_fragment("0042344919442 OF Mr. SUMIT")
     assert not is_fragment("YADAV")
     assert not is_fragment("5,416.38")  # bare footer balance
+
+
+def test_credit_column_shift_recovery():
+    """Some real statements insert a phantom extra cell before credit
+    values (pdfplumber splitting a wrapped/spaced amount) — debit rows
+    stay aligned, only credit rows drift one column right. Signature:
+    mapped debit+credit both empty, but a valid amount+balance sit one
+    column further right than mapped."""
+    grid = [
+        ["Date", "Effective Date", "Cheque Number", "Description", "Withdrawal Amt.", "Deposit Amt.", "Balance"],
+        # normal debit row: aligned exactly to the header
+        ["04/01/2025", "04/01/2025", "", "WTHDRL,UPI/DR/123", "2,000.00", "", "0.00"],
+        # shifted credit row: extra phantom cell before the real amount
+        ["24/01/2025", "24/01/2025", "", "DEPOSIT,UPI/CR/456", None, "", "180.00", "186.00"],
+    ]
+    txns, info = grid_to_txns(grid)
+    assert info["skipped"] == 0
+    assert len(txns) == 2
+    debit, credit = txns
+    assert debit.direction == "DEBIT" and debit.amount == Decimal("2000.00")
+    assert credit.direction == "CREDIT" and credit.amount == Decimal("180.00")
+    assert credit.balance == Decimal("186.00")

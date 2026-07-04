@@ -99,6 +99,12 @@ def _cell(row: list, mapping: dict[str, int], f: str):
     return row[idx]
 
 
+def _cell_at(row: list, idx: int):
+    if idx < 0 or idx >= len(row):
+        return None
+    return row[idx]
+
+
 def grid_to_txns(
     grid: list[list],
     base_confidence: float = 1.0,
@@ -155,6 +161,22 @@ def grid_to_txns(
         balance, balance_hint = parse_amount(_cell(row, mapping, "balance"))
         if balance is not None and balance_hint == "DEBIT":
             balance = -balance
+
+        if not (debit and debit > 0) and not (credit and credit > 0) and mapping.get("credit") is not None:
+            # A phantom extra cell (pdfplumber splitting a wrapped/spaced
+            # value) shifts credit rows one column right of the mapped
+            # position on some real statements — debit rows stay aligned,
+            # only credit rows drift. Signature: mapped debit+credit are
+            # both empty, but the cell ONE COLUMN PAST the mapped credit
+            # position is a valid amount AND the cell after THAT is a
+            # valid balance — i.e. the row silently grew by one cell.
+            shifted_credit, _ = parse_amount(_cell_at(row, mapping["credit"] + 1))
+            shifted_balance, shifted_bal_hint = (
+                parse_amount(_cell_at(row, mapping["credit"] + 2)) if mapping.get("balance") is not None else (None, None)
+            )
+            if shifted_credit and shifted_credit > 0 and shifted_balance is not None:
+                credit = shifted_credit
+                balance = -shifted_balance if shifted_bal_hint == "DEBIT" else shifted_balance
 
         problems: list[str] = []
         if debit and debit > 0:
