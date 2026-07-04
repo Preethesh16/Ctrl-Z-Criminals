@@ -4,6 +4,7 @@ Used by every tabular source (Excel, CSV, PDF tables, HTML tables) so all
 formats flow through identical logic.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -162,6 +163,8 @@ def grid_to_txns(
         if balance is not None and balance_hint == "DEBIT":
             balance = -balance
 
+        problems: list[str] = []
+
         if not (debit and debit > 0) and not (credit and credit > 0) and mapping.get("credit") is not None:
             # A phantom extra cell (pdfplumber splitting a wrapped/spaced
             # value) shifts credit rows one column right of the mapped
@@ -178,7 +181,32 @@ def grid_to_txns(
                 credit = shifted_credit
                 balance = -shifted_balance if shifted_bal_hint == "DEBIT" else shifted_balance
 
-        problems: list[str] = []
+        row_text = " ".join(str(c) for c in row if c is not None)
+        if (
+            not (debit and debit > 0) and not (credit and credit > 0)
+            and not (amount_cell and amount_cell > 0)
+            and re.search(r"\bWDR\b|\bWITHDRAW|\bATM\b|\bCASH\b", row_text, re.IGNORECASE)
+        ):
+            # A long narration/address value (e.g. a branch address after
+            # "ATM WDR") pushes the amount out of its mapped column
+            # entirely into an unmapped trailing cell (fixed-width TXT
+            # column-boundary inference). Recover it ONLY when: exactly
+            # one bare amount exists among the row's unmapped cells
+            # (excluding the last cell, which typically carries the
+            # running balance mixed with trailing report codes), AND the
+            # narration itself is unambiguously a withdrawal — direction
+            # is confirmed by content, never guessed. (A broader
+            # "default to debit whenever ambiguous" version of this was
+            # tried and reverted: it silently mis-assigned direction on
+            # an unrelated file's already-known-corrupted rows.)
+            used_idx = {v for v in mapping.values() if v is not None}
+            orphan_amounts = [
+                amt for j, c in enumerate(row[:-1]) if j not in used_idx
+                for amt, _ in [parse_amount(c)] if amt and amt > 0
+            ]
+            if len(orphan_amounts) == 1:
+                debit = orphan_amounts[0]
+
         if debit and debit > 0:
             amount, direction = debit, "DEBIT"
             if credit and credit > 0:

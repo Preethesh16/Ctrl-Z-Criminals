@@ -223,3 +223,26 @@ def test_credit_column_shift_recovery():
     assert debit.direction == "DEBIT" and debit.amount == Decimal("2000.00")
     assert credit.direction == "CREDIT" and credit.amount == Decimal("180.00")
     assert credit.balance == Decimal("186.00")
+
+
+def test_orphan_amount_recovery_requires_withdrawal_context():
+    """A long branch-address narration can push the amount out of its
+    mapped column into an unmapped trailing cell (fixed-width TXT).
+    Recovery must ONLY fire when the row's own text unambiguously signals
+    a withdrawal (ATM/WDR/CASH) — a broader 'default direction to debit'
+    version was tried and reverted: it silently corrupted an unrelated
+    file's already-ambiguous rows. A row with an orphan amount but no
+    withdrawal context must still be skipped, not guessed."""
+    grid = [
+        ["Date", "Value Date", "Debit", "Credit"],
+        # ATM withdrawal: address text shifted the amount to an unmapped cell
+        ["23-05-2025", "23-05-2025", "ATM WDR 12345", "BRANCH ADDR", "200.00", "315.00Cr"],
+        # unrelated ambiguous row: orphan amount present but NO withdrawal
+        # context anywhere — must be skipped, never guessed
+        ["24-05-2025", "24-05-2025", "SOME NOTE", "OTHER TEXT", "99.00", "50.00Cr"],
+    ]
+    txns, info = grid_to_txns(grid)
+    assert len(txns) == 1
+    assert txns[0].direction == "DEBIT"
+    assert txns[0].amount == Decimal("200.00")
+    assert info["skipped"] == 1
