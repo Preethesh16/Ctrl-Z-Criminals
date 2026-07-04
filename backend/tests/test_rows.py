@@ -175,3 +175,29 @@ def test_uco_bank_balance_delta_extraction():
     assert grid[1][2] == "90.00" and grid[1][3] is None  # debit (withdrawal)
     assert grid[2][2] == "90.00"  # page-break row still derived correctly
     assert [row[4] for row in grid] == ["5500.00", "5410.00", "5320.00"]
+
+
+def test_fake_table_fragment_detection_narrow():
+    """A lone-cell 'table' is only treated as a broken-page artifact when
+    the cell looks like a wrapped bank-narration fragment (UPI/IMPS/'/'
+    markers). Legitimate single-value cells — a customer email, a plain
+    account number, a footer balance, a split name — must NOT trigger
+    the whole-page fallback (regression: this over-broad check silently
+    dropped rows on unrelated real files)."""
+    from app.ingest.pdf_digital import _FRAGMENT_MARKERS, _HAS_AMOUNT
+
+    def is_fragment(cell):
+        s = str(cell).strip()
+        return bool(s) and bool(_FRAGMENT_MARKERS.search(s)) and not _HAS_AMOUNT.search(s)
+
+    # real wrapped narration fragments — must be flagged
+    assert is_fragment("SentIMPS407719023087PRA")
+    assert is_fragment("GHOSH/412279502997/UP")
+    assert is_fragment("YASH/BARBX0825/KKBKTrans")
+
+    # legitimate customer-info / footer cells — must NOT be flagged
+    assert not is_fragment("neha@sbi.co.in")
+    assert not is_fragment("7368575721")
+    assert not is_fragment("0042344919442 OF Mr. SUMIT")
+    assert not is_fragment("YADAV")
+    assert not is_fragment("5,416.38")  # bare footer balance

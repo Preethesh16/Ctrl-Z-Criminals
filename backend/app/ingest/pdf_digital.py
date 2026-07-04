@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pdfplumber
 
+from ..normalize.dates import parse_date
 from .headermeta import extract_header_meta
 
 # Fallback line shape: date ... narration ... amount(s) [balance]
@@ -107,6 +108,9 @@ _NOISE_LINE = re.compile(
     re.IGNORECASE,
 )
 _HAS_AMOUNT = re.compile(r"\d[\d,]*\.\d{2}")
+# Bank-narration-shaped content — distinguishes a wrapped transaction
+# fragment from a legitimate customer-info cell (email/account no./name).
+_FRAGMENT_MARKERS = re.compile(r"/|UPI|IMPS|NEFT|RTGS|CHQ|ATW|POS|TRTR", re.IGNORECASE)
 
 
 _LONE_AMOUNT = re.compile(rf"^{_AMT}$")
@@ -280,17 +284,35 @@ def read_pdf_grid(path: str | Path) -> tuple[list[list], dict]:
                 break
             if tables:
                 # pdfplumber sometimes "detects" fake tables that are really
-                # single transaction lines dumped whole into one cell (IDBI
-                # Bank's "Report" layout, faint ruling artifacts). Such a
-                # table only ever captures a FEW of the page's real lines —
-                # the rest sit as untouched page text. Once we see even one
-                # of these fakes, the page's table detection is proven
-                # unreliable: discard ALL of this page's table output and
-                # re-run full-text extraction instead, so nothing outside
-                # the fake tables' narrow view gets silently dropped.
+                # a single transaction line — or even just a wrapped
+                # narration FRAGMENT with no date/amount (Kotak's layout) —
+                # dumped whole into one cell (faint ruling artifacts). Such
+                # a table only ever captures a FEW of the page's real lines
+                # — the rest sit as untouched page text. Once spotted, this
+                # page's table detection is unreliable: discard ALL of this
+                # page's table output and re-run full-text extraction
+                # instead, so nothing outside the fake tables' narrow view
+                # gets silently dropped.
+                #
+                # NOTE: "no date, no amount" alone is too broad — legitimate
+                # customer-info cells (email, plain account number, a
+                # joint-holder's name split across lines) share that shape
+                # and are NOT evidence of a broken page; flagging them
+                # caused a real regression (rows dropped on unrelated
+                # files). What actually marks a WRAPPED NARRATION fragment
+                # specifically is a bank-transfer marker like "/", "UPI",
+                # "IMPS" — narrations look like this, customer-info cells
+                # never do.
+                def _is_fragment(cell) -> bool:
+                    s = str(cell).strip()
+                    return bool(s) and bool(_FRAGMENT_MARKERS.search(s)) and not _HAS_AMOUNT.search(s)
+
                 fake_table_seen = any(
-                    len(row) == 1 and row[0]
-                    and (_LINE.match(str(row[0]).strip()) or _LINE_LOOSE.match(str(row[0]).strip()))
+                    len(row) == 1 and row[0] and (
+                        _LINE.match(str(row[0]).strip())
+                        or _LINE_LOOSE.match(str(row[0]).strip())
+                        or _is_fragment(row[0])
+                    )
                     for t in tables for row in t
                 )
                 if fake_table_seen:
