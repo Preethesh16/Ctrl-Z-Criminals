@@ -89,6 +89,11 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 28: zero-transaction files count as unreadable (user-found gap)
+- User tested with a dummy photo: OCR "succeeded" with 0 transactions → document status `parsed`, so the Session-27 filter (status==='failed') missed it. Fix in `FailedStatements.tsx`: `isUnreadable()` = status failed OR (settled AND `txn_count === 0`), plus a plain-English reason ("file was read but no transactions were found — may not be a bank statement / photo too unclear").
+- Verified on the user's real `CEN/Dummy/2026` case (:3000): both dummy jpgs (parsed, 0 txns) now show as "Not read" with re-upload + manual-fix actions. Docker web rebuilt; pushed.
+- ⚠️ Parallel-session note: local commit `cf98ed6` (fast tier-2 matcher in `backend/app/detection/flowgraph.py`) + an uncommitted partial revert of that file exist from another session working on REALDATA analysis speed — left untouched, not part of this commit.
+
 ### 2026-07-05 — Session 27: failed statements surfaced in Review step (re-upload / manual fix)
 - New `components/FailedStatements.tsx`, rendered at the top of the wizard Review step (also in the zero-transactions branch so all-failed cases still show it): lists case documents with `status === 'failed'`, plain-English reason (password / unsupported / unrecognized layout / raw error), and two actions per statement — **"⬆ Re-upload corrected file"** (hidden file input → `uploadDocument` → poll job → success/failure notice incl. 409 same-file guidance → refresh) and **"✎ Fix columns manually"** (existing `ColumnMappingModal`; template-saved and re-parse-job paths both handled).
 - Mock-parity fix: mock adapter now stores a failed Document row for password/unsupported failures too (mirrors real backend, which always creates the Document row before parsing).
