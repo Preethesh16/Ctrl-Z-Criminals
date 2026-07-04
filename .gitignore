@@ -19,6 +19,8 @@ frontend/.env
 # CONFIDENTIAL — real police test data. NEVER commit or push. Testing only.
 Bank-statements-dataset/
 Bank-statements-dataset*/
+tempData/
+tempData*/
 
 # Data & artifacts
 backend/uploads/
