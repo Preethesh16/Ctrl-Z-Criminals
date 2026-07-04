@@ -48,6 +48,13 @@ def parse_amount(value) -> tuple[Decimal | None, str | None]:
     if s.startswith("-"):
         negative, s = True, s[1:]
 
+    # pdfplumber sometimes splits a narration/account digit into the amount
+    # cell, e.g. "5 80000.00". Treat the final numeric token as the amount
+    # instead of concatenating the digit into 580000.00.
+    tokens = re.findall(r"\d[\d,]*(?:\.\d+)?", s)
+    if len(tokens) > 1:
+        s = tokens[-1]
+
     s = _CLEAN_RE.sub("", s)
     if not s or not re.fullmatch(r"\d+(\.\d+)?", s):
         return None, None
@@ -58,3 +65,11 @@ def parse_amount(value) -> tuple[Decimal | None, str | None]:
     if negative and hint is None:
         hint = "DEBIT"
     return d, hint
+
+
+def parse_balance_amount(value) -> Decimal | None:
+    """Parse a running balance, preserving debit/negative signs."""
+    amount, hint = parse_amount(value)
+    if amount is None:
+        return None
+    return -amount if hint == "DEBIT" else amount
