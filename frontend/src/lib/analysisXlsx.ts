@@ -30,6 +30,43 @@ function sheet(wb: XLSX.WorkBook, name: string, rows: Array<Record<string, unkno
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31))
 }
 
+type ReportSection =
+  | { title: string; facts: Array<[string, string]> }
+  | { title: string; rows: Array<Record<string, unknown>> }
+
+function rowsToAoa(rows: Array<Record<string, unknown>>): unknown[][] {
+  if (rows.length === 0) return [['(none)']]
+  const headers = [...new Set(rows.flatMap((r) => Object.keys(r)))]
+  return [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ''))]
+}
+
+/**
+ * First sheet of every workbook: the whole report stacked vertically in PDF
+ * order (title, summary, then each section), so opening the file shows
+ * everything the PDF shows. The per-section sheets that follow hold the
+ * same tables again for sorting/filtering.
+ */
+function reportSheet(
+  wb: XLSX.WorkBook,
+  title: string,
+  caseLabel: string,
+  sections: ReportSection[],
+): void {
+  const aoa: unknown[][] = [
+    [title],
+    [`Case: ${caseLabel}`],
+    [`Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`],
+    [],
+  ]
+  for (const s of sections) {
+    aoa.push([s.title])
+    if ('facts' in s) aoa.push(...s.facts.map(([k, v]) => [k, v]))
+    else aoa.push(...rowsToAoa(s.rows))
+    aoa.push([])
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Report')
+}
+
 function summarySheet(wb: XLSX.WorkBook, caseLabel: string, facts: Array<[string, string]>): void {
   sheet(wb, 'Summary', [
     { Item: 'Case', Value: caseLabel },
@@ -98,20 +135,15 @@ export function downloadGraphReportXlsx(opts: {
   const mules = opts.nodes.filter((n) => n.role === 'mule').length
   const suspects = opts.nodes.filter((n) => n.role === 'suspect').length
   const victim = opts.nodes.find((n) => n.role === 'victim')
-  summarySheet(wb, opts.caseLabel, [
+  const summaryFacts: Array<[string, string]> = [
     ['Accounts in graph', String(opts.nodes.length)],
     ['Mule accounts', String(mules)],
     ['Suspect accounts', String(suspects)],
     ['Likely victim', victim ? victim.label.replace('ext:', '') : '—'],
     ['Round trips detected', String(opts.roundTrips.length)],
-  ])
-  sheet(wb, 'Accounts', accountRows(opts.nodes))
-  if (opts.roundTrips.length > 0) sheet(wb, 'Round trips', roundTripRows(opts.roundTrips))
-  if (opts.focused) {
-    sheet(
-      wb,
-      'Account focus',
-      opts.focused.connections.flatMap((c) =>
+  ]
+  const focusRows = opts.focused
+    ? opts.focused.connections.flatMap((c) =>
         c.transfers.map((t) => ({
           Direction: t.dir === 'in' ? 'IN' : 'OUT',
           Account: opts.focused!.node.label.replace('ext:', ''),
@@ -121,9 +153,28 @@ export function downloadGraphReportXlsx(opts: {
           Channel: t.channel,
           Evidence: t.tier === 'external' ? 'one-sided' : t.tier,
         })),
-      ),
-    )
-  }
+      )
+    : null
+  reportSheet(wb, 'TraceNet — Money Flow Report', opts.caseLabel, [
+    { title: 'Summary', facts: summaryFacts },
+    { title: 'Accounts (most suspicious first)', rows: accountRows(opts.nodes) },
+    {
+      title: `Round-tripping — money returning to its origin (${opts.roundTrips.length})`,
+      rows: roundTripRows(opts.roundTrips),
+    },
+    ...(focusRows
+      ? [
+          {
+            title: `Account focus: ${opts.focused!.node.label.replace('ext:', '')}`,
+            rows: focusRows,
+          },
+        ]
+      : []),
+  ])
+  summarySheet(wb, opts.caseLabel, summaryFacts)
+  sheet(wb, 'Accounts', accountRows(opts.nodes))
+  if (opts.roundTrips.length > 0) sheet(wb, 'Round trips', roundTripRows(opts.roundTrips))
+  if (focusRows) sheet(wb, 'Account focus', focusRows)
   XLSX.writeFile(wb, `flow-graph-report-${safeStem(opts.caseLabel)}.xlsx`)
 }
 
@@ -135,7 +186,7 @@ export function downloadTrailReportXlsx(opts: {
   roles?: Map<string, NodeRole>
 }): void {
   const wb = XLSX.utils.book_new()
-  summarySheet(wb, opts.caseLabel, [
+  const facts: Array<[string, string]> = [
     ['Credit followed (INR)', opts.credit.amount_inr],
     ['Received on', opts.credit.txn_date],
     ['Into account', opts.credit.account_ref],
@@ -143,8 +194,14 @@ export function downloadTrailReportXlsx(opts: {
     ['Moved on (INR)', opts.trail.spent],
     ['Still resting (INR)', opts.trail.resting],
     ['Layers', String(opts.trail.hops.length)],
+  ]
+  const rows = trailRows(opts.trail, opts.roles ?? new Map())
+  reportSheet(wb, 'TraceNet — Money Trail Report', opts.caseLabel, [
+    { title: 'Summary', facts },
+    { title: 'Money trail — layer by layer', rows },
   ])
-  sheet(wb, 'Trail', trailRows(opts.trail, opts.roles ?? new Map()))
+  summarySheet(wb, opts.caseLabel, facts)
+  sheet(wb, 'Trail', rows)
   XLSX.writeFile(
     wb,
     `money-trail-${opts.credit.account_ref}-${safeStem(opts.caseLabel)}.xlsx`,
@@ -165,27 +222,40 @@ export function downloadVisualAnalysisXlsx(opts: {
     role: roles.get(n.data.id) ?? 'other',
   }))
   const wb = XLSX.utils.book_new()
-  summarySheet(wb, opts.caseLabel, [
+  const facts: Array<[string, string]> = [
     ['Accounts in graph', String(nodes.length)],
     ['Mule accounts', String(nodes.filter((n) => n.role === 'mule').length)],
     ['Round trips detected', String(opts.roundTrips.length)],
     ['Money trails included', String(opts.trails.length)],
+  ]
+  const dispositionRows = opts.disposition
+    ? Object.entries(opts.disposition.buckets).map(([bucket, v]) => ({
+        Bucket: bucket,
+        'Amount (INR)': Number(v.amount),
+        '% of debits': v.pct,
+      }))
+    : null
+  reportSheet(wb, 'TraceNet — Visual Analysis Report', opts.caseLabel, [
+    { title: 'Summary', facts },
+    { title: '1. Money flow — accounts (most suspicious first)', rows: accountRows(nodes) },
+    {
+      title: `2. Round-tripping — money returning to its origin (${opts.roundTrips.length})`,
+      rows: roundTripRows(opts.roundTrips),
+    },
+    ...opts.trails.map(({ credit, trail }, i) => ({
+      title: `3.${i + 1} Money trail — following ${credit.amount_inr} INR received ${credit.txn_date} into A/c ${credit.account_ref}`,
+      rows: trailRows(trail, roles),
+    })),
+    ...(dispositionRows
+      ? [{ title: 'Disposition — how the money finally left', rows: dispositionRows }]
+      : []),
   ])
+  summarySheet(wb, opts.caseLabel, facts)
   sheet(wb, 'Accounts', accountRows(nodes))
   if (opts.roundTrips.length > 0) sheet(wb, 'Round trips', roundTripRows(opts.roundTrips))
   opts.trails.forEach(({ credit, trail }, i) => {
     sheet(wb, `Trail ${i + 1} (${credit.amount_inr})`, trailRows(trail, roles))
   })
-  if (opts.disposition) {
-    sheet(
-      wb,
-      'Disposition',
-      Object.entries(opts.disposition.buckets).map(([bucket, v]) => ({
-        Bucket: bucket,
-        'Amount (INR)': Number(v.amount),
-        '% of debits': v.pct,
-      })),
-    )
-  }
+  if (dispositionRows) sheet(wb, 'Disposition', dispositionRows)
   XLSX.writeFile(wb, `visual-analysis-${safeStem(opts.caseLabel)}.xlsx`)
 }

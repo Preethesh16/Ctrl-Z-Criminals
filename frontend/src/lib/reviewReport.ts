@@ -167,46 +167,68 @@ export async function downloadReviewReportXlsx(
     .filter((t) => t.direction === 'CREDIT' && !t.excluded)
     .reduce((s, t) => s + Number(t.amount_inr), 0)
 
+  const summaryFacts: Array<[string, string]> = [
+    ['Case', firNumber ?? caseId],
+    [
+      'Generated',
+      `${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`,
+    ],
+    [
+      'Transactions',
+      `${rows.length}${rows.length < total ? ` of ${total} (truncated)` : ''}`,
+    ],
+    ['Accounts', String(new Set(rows.map((t) => t.account_ref)).size)],
+    ['Reviewed', String(reviewed)],
+    ['Pending review', String(pending)],
+    ['Excluded', String(excluded)],
+    ['Total debits (INR)', totalDebit.toFixed(2)],
+    ['Total credits (INR)', totalCredit.toFixed(2)],
+    ['Flagged rows', String(rows.filter((t) => t.flags.length > 0).length)],
+  ]
+  const txnHeader = [
+    'Account No.',
+    'Date',
+    'Time',
+    'Narration',
+    'Channel',
+    'Reference ID',
+    'Debit (INR)',
+    'Credit (INR)',
+    'Balance (INR)',
+    'Review status',
+    'Flags',
+  ]
+  const txnRows = rows.map((t) => [
+    t.account_ref,
+    t.txn_date,
+    t.txn_time ?? '',
+    t.narration_raw,
+    t.channel,
+    t.reference_id ?? '',
+    t.direction === 'DEBIT' ? Number(t.amount_inr) : '',
+    t.direction === 'CREDIT' ? Number(t.amount_inr) : '',
+    t.balance_after !== null ? Number(t.balance_after) : '',
+    reviewStatus(t),
+    t.flags.map((f) => f.rule).join('; '),
+  ])
+
   const wb = XLSX.utils.book_new()
+  // First sheet mirrors the PDF: title, summary block, then the full table —
+  // opening the file shows everything the PDF shows, no tab-hunting needed.
   XLSX.utils.book_append_sheet(
     wb,
-    XLSX.utils.json_to_sheet([
-      { Item: 'Case', Value: firNumber ?? caseId },
-      {
-        Item: 'Generated',
-        Value: `${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`,
-      },
-      {
-        Item: 'Transactions',
-        Value: `${rows.length}${rows.length < total ? ` of ${total} (truncated)` : ''}`,
-      },
-      { Item: 'Accounts', Value: String(new Set(rows.map((t) => t.account_ref)).size) },
-      { Item: 'Reviewed', Value: String(reviewed) },
-      { Item: 'Pending review', Value: String(pending) },
-      { Item: 'Excluded', Value: String(excluded) },
-      { Item: 'Total debits (INR)', Value: totalDebit.toFixed(2) },
-      { Item: 'Total credits (INR)', Value: totalCredit.toFixed(2) },
-      { Item: 'Flagged rows', Value: String(rows.filter((t) => t.flags.length > 0).length) },
+    XLSX.utils.aoa_to_sheet([
+      ['TraceNet — Transaction Review Report'],
+      ...summaryFacts.map(([k, v]) => [k, v]),
+      [],
+      txnHeader,
+      ...txnRows,
     ]),
-    'Summary',
+    'Report',
   )
   XLSX.utils.book_append_sheet(
     wb,
-    XLSX.utils.json_to_sheet(
-      rows.map((t) => ({
-        'Account No.': t.account_ref,
-        Date: t.txn_date,
-        Time: t.txn_time ?? '',
-        Narration: t.narration_raw,
-        Channel: t.channel,
-        'Reference ID': t.reference_id ?? '',
-        'Debit (INR)': t.direction === 'DEBIT' ? Number(t.amount_inr) : '',
-        'Credit (INR)': t.direction === 'CREDIT' ? Number(t.amount_inr) : '',
-        'Balance (INR)': t.balance_after !== null ? Number(t.balance_after) : '',
-        'Review status': reviewStatus(t),
-        Flags: t.flags.map((f) => f.rule).join('; '),
-      })),
-    ),
+    XLSX.utils.aoa_to_sheet([txnHeader, ...txnRows]),
     'Transactions',
   )
   XLSX.writeFile(wb, `review-report-${safeFileStem(firNumber, caseId)}.xlsx`)
