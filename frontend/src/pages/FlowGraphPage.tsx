@@ -19,13 +19,57 @@ import { fadeIn, staggerContainer } from '../theme/motion'
 
 /** Design-token palette for the graph (sanctioned hexes from theme.css). */
 const COLORS = {
-  high: '#e5484d',
-  medium: '#f5a623',
-  low: '#6b7280',
-  own: '#2f6fed',
+  victim: '#2f6fed',
+  mule: '#e5484d',
+  suspect: '#f5a623',
+  other: '#6b7280',
   edge: '#9ca3af',
   loop: '#e5484d',
   label: '#16161d',
+  ownBorder: '#16161d',
+}
+
+export type NodeRole = 'victim' | 'mule' | 'suspect' | 'other'
+
+/**
+ * Officer-facing roles derived from analysis fields the backend already
+ * publishes: mule = high suspicion (round-trip member or accumulator),
+ * suspect = medium suspicion (3+ flags), victim = the unsuspicious own
+ * account that sends the most money toward mule/suspect accounts.
+ */
+function deriveRoles(
+  nodes: Array<{ data: GraphNodeData }>,
+  edges: Array<{ data: GraphEdgeData }>,
+): Map<string, NodeRole> {
+  const roles = new Map<string, NodeRole>()
+  for (const { data } of nodes) {
+    if (data.suspicion === 'high') roles.set(data.id, 'mule')
+    else if (data.suspicion === 'medium') roles.set(data.id, 'suspect')
+    else roles.set(data.id, 'other')
+  }
+  // Money each clean own-account sends into suspicious hands.
+  const sentToSuspicious = new Map<string, number>()
+  for (const { data } of edges) {
+    const targetRole = roles.get(data.target)
+    if (targetRole === 'mule' || targetRole === 'suspect') {
+      sentToSuspicious.set(
+        data.source,
+        (sentToSuspicious.get(data.source) ?? 0) + Number(data.amount),
+      )
+    }
+  }
+  let victimId: string | null = null
+  let victimSent = 0
+  for (const { data } of nodes) {
+    if (!data.own_account || data.suspicion !== 'low' || data.accumulator) continue
+    const sent = sentToSuspicious.get(data.id) ?? 0
+    if (sent > victimSent) {
+      victimSent = sent
+      victimId = data.id
+    }
+  }
+  if (victimId) roles.set(victimId, 'victim')
+  return roles
 }
 
 function buildStylesheet(): cytoscape.StylesheetJson {
@@ -40,10 +84,12 @@ function buildStylesheet(): cytoscape.StylesheetJson {
         'text-margin-y': 6,
         width: 'data(size)',
         height: 'data(size)',
+        shape: (el: cytoscape.NodeSingular) =>
+          el.data('role') === 'victim' ? 'star' : 'ellipse',
         'background-color': (el: cytoscape.NodeSingular) =>
-          COLORS[el.data('suspicion') as 'high' | 'medium' | 'low'] ?? COLORS.low,
+          COLORS[el.data('role') as NodeRole] ?? COLORS.other,
         'border-width': (el: cytoscape.NodeSingular) => (el.data('own_account') ? 4 : 0),
-        'border-color': COLORS.own,
+        'border-color': COLORS.ownBorder,
       },
     },
     {
@@ -119,12 +165,14 @@ export function FlowGraphPage() {
       ...graph.nodes.map((n) => Number(n.data.inflow) + Number(n.data.outflow)),
     )
     const maxAmount = Math.max(1, ...graph.edges.map((e) => Number(e.data.amount)))
+    const roles = deriveRoles(graph.nodes, graph.edges)
     const cy = cytoscape({
       container: containerRef.current,
       elements: {
         nodes: graph.nodes.map((n) => ({
           data: {
             ...n.data,
+            role: roles.get(n.data.id) ?? 'other',
             size:
               28 + 42 * ((Number(n.data.inflow) + Number(n.data.outflow)) / maxThroughput),
           },
@@ -201,7 +249,7 @@ export function FlowGraphPage() {
         <div>
           <h1 className="text-display text-text-primary">Flow Graph</h1>
           <p className="text-body text-text-secondary mt-1">
-            Who sent money to whom — thicker arrows carry more money, red accounts are suspicious
+            Who sent money to whom — blue star = victim, red = mule accounts, amber = under watch
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -282,12 +330,16 @@ export function FlowGraphPage() {
         )}
         <div className="absolute bottom-4 left-4 card !p-3 text-label text-text-secondary flex gap-4">
           <span>
+            <span className="inline-block text-primary mr-1 align-middle">★</span>
+            victim
+          </span>
+          <span>
             <span className="inline-block w-3 h-3 rounded-pill bg-danger mr-1 align-middle" />
-            suspicious
+            mule
           </span>
           <span>
             <span className="inline-block w-3 h-3 rounded-pill bg-warning mr-1 align-middle" />
-            watch
+            suspect / watch
           </span>
           <span className="border-b-2 border-dashed border-text-secondary self-center pb-0">
             dashed = probable link

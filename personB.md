@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-04 — Session 15: flow-graph role colors (victim / mule / suspect)
+- User request: color nodes by role instead of abstract suspicion. Frontend-only (`FlowGraphPage.tsx` + `GraphDrawers.tsx`), no contract change: `deriveRoles(nodes, edges)` — mule = suspicion high (loop member/accumulator), suspect = medium, **victim = clean own-account sending the most money to mule/suspect nodes** (first heuristic — net outflow — failed on realistic data where victims have net inflow; edge-based version works on mock and forge shapes).
+- Victim renders as a **blue star** (colorblind-safe shape + color); mule red, suspect amber, other grey; own-account border moved to dark since blue now means victim. Legend = victim ★ / mule / suspect / dashed. NodeDrawer shows a role tag ("★ Likely victim account" / "Mule pattern" / "Suspect — under watch").
+- Verified headless on mock demo case (screenshot: star victim + 3 red mules + amber suspect). Docker web rebuilt — :3000 serves it. ⚠️ Ops gotcha: TWO stale vite instances can pile up on :3001/:3002 — `pkill -f "node_modules/.bin/vite"` before restarting; also verify served module with `curl localhost:3001/src/pages/<file> | grep <new symbol>`.
+
+
 ### 2026-07-04 — Session 14: review report as PDF + Docker web rebuilds
 - Added PDF export for the review report (user request): jsPDF + jspdf-autotable client-side, same data path as the CSV (shared `fetchAllTransactions`, 500/page, 20k cap). Landscape A4, TraceNet header, FIR, generated-at IST, reviewed/pending/excluded tally, footer with page numbers. Buttons: "⬇ Generate review report (PDF)" (primary report action) + compact "CSV" beside it.
 - E2E-verified on the mock demo case via headless chromium: button click → `review-report-CEN_0042_2026.pdf`, 4 pages, text content validated with pdfplumber (header/tally/columns/footer all present).

@@ -38,13 +38,19 @@ function DrawerShell({ title, onClose, children }: {
 }
 
 /** Node click → the account's numbers, badge, and its flagged transactions. */
+const ROLE_TAGS: Record<string, { label: string; className: string }> = {
+  victim: { label: '★ Likely victim account', className: 'bg-primary-soft text-primary' },
+  mule: { label: 'Mule pattern', className: 'bg-danger-soft text-danger' },
+  suspect: { label: 'Suspect — under watch', className: 'bg-warning-soft text-warning' },
+}
+
 export function NodeDrawer({
   caseId,
   node,
   onClose,
 }: {
   caseId: string
-  node: GraphNodeData
+  node: GraphNodeData & { role?: string }
   onClose: () => void
 }) {
   const [transactions, setTransactions] = useState<TransactionOut[] | null>(null)
@@ -66,20 +72,16 @@ export function NodeDrawer({
   return (
     <DrawerShell title={node.label} onClose={onClose}>
       <div className="flex gap-2 mb-4 flex-wrap">
+        {node.role && ROLE_TAGS[node.role] ? (
+          <span className={`tag ${ROLE_TAGS[node.role].className}`}>
+            {ROLE_TAGS[node.role].label}
+          </span>
+        ) : (
+          <span className="tag bg-primary-soft text-primary">Normal</span>
+        )}
         {node.accumulator && (
           <span className="tag bg-danger-soft text-danger">Funds accumulate here</span>
         )}
-        <span
-          className={`tag ${
-            node.suspicion === 'high'
-              ? 'bg-danger-soft text-danger'
-              : node.suspicion === 'medium'
-                ? 'bg-warning-soft text-warning'
-                : 'bg-primary-soft text-primary'
-          }`}
-        >
-          {node.suspicion === 'high' ? 'Suspicious' : node.suspicion === 'medium' ? 'Watch' : 'Normal'}
-        </span>
         {node.own_account && <span className="tag bg-primary-soft text-primary">Statement uploaded</span>}
       </div>
 
