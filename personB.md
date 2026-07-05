@@ -89,6 +89,13 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 38: FIFO money-trail demo case + fixed the trail default (NOT PUSHED)
+- Built a local demo case `CEN/FIFO-DEMO/2026` (id 6f2b5464…, local Postgres only — confidential source, never pushed): 10 pass-through mule accounts picked from the dataset by analysis (≈100% outflow, big single credits, modest txn counts to avoid lag). 14,050 txns, analysis 30s, 252 graph nodes (no truncation), 8 round trips.
+- **Validated FIFO independently** (recomputed vs `fifo_trail`): all math checks pass (attributed==spent, spent+resting==credit, hop≤debit). Every one of the 10 accounts has a credit that trails strongly (8–282 hops, fully traced).
+- **Found + fixed a real bug**: MoneyTrailPage defaulted to the balance-recovery rule (session 34), which on pass-through accounts that run near-zero balance collapses to **0 hops on 7 of 10 accounts** — empty trails. Reverted default to **tranche** ("Until this money has left" now maps to tranche = trace until the credit's full amount has left = the complete trail); balance kept as secondary "Until balance recovers". Header/tooltips updated. Verified E2E on the demo case: 8/8 sampled credits trace with Sankey, 0 errors (was mostly empty before).
+- Frontend-only change (MoneyTrailPage). Build+lint clean, web rebuilt. Committed locally only.
+
+
 ### 2026-07-05 — Session 37: review page also flags parsed-but-zero-transaction statements (NOT PUSHED)
 - User: statements that parse to 0 transactions (blurry scan / photo / not-a-statement, e.g. `4513362998.pdf`, `BOM_Statement_FTP_…7596_…pdf`) weren't showing in review's failed-statements section (session-36 had narrowed the filter to status=failed only). Restored `needsAttention(doc)` = status=failed OR (parsed & txn_count===0), plus a plain-English reason for the zero-txn case ("read but no transactions found — blurry scan/photo or not a bank statement — upload a clearer copy or map columns"). Re-upload + Fix-columns actions unchanged. Frontend-only add-on; nothing else touched.
 - Verified on REALDATA (text-only, no confidential capture): both named files appear as needs-attention cards with the reason and both action buttons; 0 page errors. Build+lint clean, web rebuilt. Committed locally only.

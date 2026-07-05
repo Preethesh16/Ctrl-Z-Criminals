@@ -19,9 +19,11 @@ export function MoneyTrailPage() {
   const caseId = searchParams.get('case')
   const [credits, setCredits] = useState<TransactionOut[] | null>(null)
   const [selectedCredit, setSelectedCredit] = useState<TransactionOut | null>(null)
-  // Default: trace until the account is left with ≤ the balance it held
-  // before this credit arrived (i.e. this money has effectively left).
-  const [stopRule, setStopRule] = useState<TrailStopRule>('balance')
+  // Default: strict FIFO — trace this credit until its full amount has left
+  // the account (the complete money trail). The balance-recovery rule is a
+  // stricter alternative, but on pass-through accounts that run near-zero it
+  // stops immediately, so it is not the default.
+  const [stopRule, setStopRule] = useState<TrailStopRule>('tranche')
   const [trail, setTrail] = useState<Trail | null>(null)
   const [loadingTrail, setLoadingTrail] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -99,8 +101,8 @@ export function MoneyTrailPage() {
         <div>
           <h1 className="text-display text-text-primary">Money Trail</h1>
           <p className="text-body text-text-secondary mt-1">
-            Pick a credit — the trail follows that money out of the account until the balance
-            returns to what it was before the money arrived
+            Pick a credit — the trail follows that exact money out of the account, transfer by
+            transfer, until its full amount has left
           </p>
         </div>
         {cases && cases.length > 1 && (
@@ -175,18 +177,18 @@ export function MoneyTrailPage() {
                 </p>
                 <div className="flex gap-2">
                   <Button
-                    variant={stopRule === 'balance' ? 'primary' : 'secondary'}
-                    onClick={() => setStopRule('balance')}
-                    title="Trace outgoing transfers until the account is left with ≤ the balance it held before this credit arrived — i.e. this money has effectively left"
+                    variant={stopRule === 'tranche' ? 'primary' : 'secondary'}
+                    onClick={() => setStopRule('tranche')}
+                    title="Strict FIFO: trace every outgoing transfer this credit funded, until its full amount has left the account — the complete money trail"
                   >
                     Until this money has left
                   </Button>
                   <Button
-                    variant={stopRule === 'tranche' ? 'primary' : 'secondary'}
-                    onClick={() => setStopRule('tranche')}
-                    title="Strict FIFO: stop when this specific credit's tranche is fully spent"
+                    variant={stopRule === 'balance' ? 'primary' : 'secondary'}
+                    onClick={() => setStopRule('balance')}
+                    title="Stop as soon as the account balance drops back to what it was before this credit — on busy pass-through accounts this can stop early"
                   >
-                    Until fully spent (FIFO)
+                    Until balance recovers
                   </Button>
                   {trail && (
                     <DownloadChoice
