@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { AnalysisSummary, CaseOut, Page, TransactionOut } from '../api/types'
+import { FailedStatements } from '../components/FailedStatements'
 import { ReviewQueue } from '../components/ReviewQueue'
 import { UploadDropzone } from '../components/UploadDropzone'
 import { Button } from '../components/ui/Button'
@@ -194,11 +195,14 @@ function ReviewStep({
 
   if (!page || page.total === 0) {
     return (
-      <Card className="max-w-xl">
-        <p className="text-body text-text-secondary">
-          No transactions yet — upload at least one statement in the Upload step first.
-        </p>
-      </Card>
+      <div>
+        <FailedStatements caseId={caseId} onChanged={onChanged} />
+        <Card className="max-w-xl">
+          <p className="text-body text-text-secondary">
+            No transactions yet — upload at least one statement in the Upload step first.
+          </p>
+        </Card>
+      </div>
     )
   }
 
@@ -217,6 +221,7 @@ function ReviewStep({
 
   return (
     <motion.div variants={fadeIn} initial="hidden" animate="visible">
+      <FailedStatements caseId={caseId} onChanged={onChanged} />
       <ReviewQueue caseId={caseId} onChanged={onChanged} />
 
       <div className="mb-4 flex items-center justify-between gap-3">

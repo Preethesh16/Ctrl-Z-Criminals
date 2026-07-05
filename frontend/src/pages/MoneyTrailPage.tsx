@@ -19,7 +19,9 @@ export function MoneyTrailPage() {
   const caseId = searchParams.get('case')
   const [credits, setCredits] = useState<TransactionOut[] | null>(null)
   const [selectedCredit, setSelectedCredit] = useState<TransactionOut | null>(null)
-  const [stopRule, setStopRule] = useState<TrailStopRule>('tranche')
+  // Default: trace until the account is left with ≤ the balance it held
+  // before this credit arrived (i.e. this money has effectively left).
+  const [stopRule, setStopRule] = useState<TrailStopRule>('balance')
   const [trail, setTrail] = useState<Trail | null>(null)
   const [loadingTrail, setLoadingTrail] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -41,12 +43,13 @@ export function MoneyTrailPage() {
     setExporting(true)
     try {
       const caseLabel = cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case'
+      const cid = caseId ?? 'case'
       if (format === 'pdf') {
         const svg = sankeyRef.current?.querySelector('svg') ?? null
         const sankeyPng = svg ? await svgToPng(svg) : null
-        downloadTrailReportPdf({ caseLabel, credit: selectedCredit, trail, sankeyPng, roles })
+        await downloadTrailReportPdf({ caseId: cid, caseLabel, credit: selectedCredit, trail, sankeyPng, roles })
       } else {
-        downloadTrailReportXlsx({ caseLabel, credit: selectedCredit, trail, roles })
+        await downloadTrailReportXlsx({ caseId: cid, caseLabel, credit: selectedCredit, trail, roles })
       }
     } finally {
       setExporting(false)
@@ -96,7 +99,8 @@ export function MoneyTrailPage() {
         <div>
           <h1 className="text-display text-text-primary">Money Trail</h1>
           <p className="text-body text-text-secondary mt-1">
-            Pick a credit and follow that exact money until it leaves the account
+            Pick a credit — the trail follows that money out of the account until the balance
+            returns to what it was before the money arrived
           </p>
         </div>
         {cases && cases.length > 1 && (
@@ -171,18 +175,18 @@ export function MoneyTrailPage() {
                 </p>
                 <div className="flex gap-2">
                   <Button
-                    variant={stopRule === 'tranche' ? 'primary' : 'secondary'}
-                    onClick={() => setStopRule('tranche')}
-                    title="Strict FIFO: stop when this credit's money is fully spent"
-                  >
-                    Until fully spent
-                  </Button>
-                  <Button
                     variant={stopRule === 'balance' ? 'primary' : 'secondary'}
                     onClick={() => setStopRule('balance')}
-                    title="Stop when the balance returns to its level before this credit"
+                    title="Trace outgoing transfers until the account is left with ≤ the balance it held before this credit arrived — i.e. this money has effectively left"
                   >
-                    Until balance recovers
+                    Until this money has left
+                  </Button>
+                  <Button
+                    variant={stopRule === 'tranche' ? 'primary' : 'secondary'}
+                    onClick={() => setStopRule('tranche')}
+                    title="Strict FIFO: stop when this specific credit's tranche is fully spent"
+                  >
+                    Until fully spent (FIFO)
                   </Button>
                   {trail && (
                     <DownloadChoice

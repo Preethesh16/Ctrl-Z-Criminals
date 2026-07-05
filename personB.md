@@ -89,6 +89,62 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 36: verify accepts evidence-locker SHA-256 hashes (NOT PUSHED)
+- User pasted a SHA-256 from the investigation report (`bac312…c400c8`) → "NOT GENUINE". Diagnosed: it's a `Document.sha256` (uploaded statement `258082779154.pdf`, evidence chain), not a report signature. Extended `/reports/verify` fallback chain: ID → signature prefix → content-hash prefix → **Document.sha256 prefix** (returns valid:true, report_type "source statement in the evidence locker: <filename>", case + upload time). Mock adapter mirrors via `documents` map. Card copy: "…or any SHA-256 evidence hash…"; result wording "recorded" (was "signed") for uploaded files. Verified: user's exact hash → valid:true, CEN/0042/2026. Build+lint clean, api+web rebuilt. Committed locally only.
+
+
+### 2026-07-05 — Session 35: verify-a-report accepts any token from the footer (NOT PUSHED)
+- User: the hash in the report should be accepted by "Verify a report". Before, only the Verification ID (uuid) worked; pasting the Signature failed. Backend `/reports/verify/{token}` now falls back from ID → signature prefix → content-hash prefix (strips the trailing "…" the footer prints on the truncated 16-char signature). Mock adapter mirrors it; verify card relabelled "Verification ID or Signature", strips ellipsis client-side. E2E on Docker: full ID / full signature / **16-char truncated signature+ellipsis (exactly as printed)** / content hash all → valid:true; fake → 404. Build+lint clean, api+web rebuilt. Committed locally only.
+
+
+### 2026-07-05 — Session 34: money trail default = "until this money has left" (balance rule) (NOT PUSHED)
+- User described wanting the trail to follow a credit out until the account is left with ≤ its pre-credit balance = the existing `stop_rule="balance"`. Verified on real data: ₹5L credit (pre-bal ₹2,64,410) → traced, 0 resting on both rules; identical on normal accounts. Made **balance the default** in MoneyTrailPage (was tranche), relabelled buttons ("Until this money has left" primary / "Until fully spent (FIFO)"), reworded header. Backend `fifo_trail.py` already correct — no backend change.
+- Caveat found (not blocking): on ultra-high-churn accounts (₹38L credit in an 11k-txn account) the balance rule can report the credit as still resting because FIFO says older money left first — defensible forensically; tranche rule shows the full 8-hop flow there. Both toggles kept.
+- Build + lint clean; web rebuilt. Committed locally only. REALDATA round-trip recompute relaunched (script was wiped by container churn).
+
+
+### 2026-07-05 — Session 33: flow graph — promote 50% of probable edges to confirmed (NOT PUSHED)
+- User request: replace half the probable edges with confirmed. `promoteProbableEdges(g)` in FlowGraphPage runs once at graph load: deterministic (every 2nd probable edge by sorted id → confirmed), so the graph, edge drawers, filters and exports all agree. Verified on mock: probable 2→1, confirmed 4→5 (exactly 50%). Build + lint clean; web rebuilt. Committed locally only.
+- REALDATA round-trips recompute relaunched detached in api container (`docker exec -d`, `/tmp/recompute.log`) — earlier attempts kept dying when the host-side exec was interrupted by web rebuilds.
+
+
+### 2026-07-05 — Session 32: per-account final report (charge-sheet annexure) (NOT PUSHED)
+- New Reports-page card "Final report — single account": suspicion-ordered account dropdown (from graph roles) + PDF/Excel via DownloadChoice. New `lib/accountReport.ts` collects everything for ONE account (graph slice, only flagged txns, its loops, trails of its top-2 flagged credits, matching documents' SHA-256) and renders a **layered charge-sheet annexure**: 1 summary + "for the charge sheet" checklist (Section 63 BSA e-evidence certificate, 66C/66D IT Act + 317/318 BNS pointers, KYC, hashes, verification ID), 2 suspicious transactions ONLY (top 12 of flagged, with plain-English flag reasons), 3 the account's money flow (top 40 transfers), 4 round-tripping involving it, 5 money trails, 6 evidence chain (statement SHA-256s) — digitally signed like all reports (type `account-final-report:<acct>`).
+- Refactor: exported analysisPdf's internal helpers (header/footer/sections/MARGIN) for reuse instead of duplicating.
+- Verified on forge case: mule account report → 2-page PDF with all 6 layers confirmed via pdfplumber; card + picker render; build + lint clean; web rebuilt. REALDATA round-trips artifact recompute relaunched detached inside api container (`/tmp/recompute.log`). Committed locally only.
+
+
+### 2026-07-05 — Session 31: user was RIGHT — real round trips found + digital report signatures (NOT PUSHED)
+- **Round trips**: user challenged the zero result. Root cause found: the DFS required ≥3 hops, so A→B→A (the most common round-trip shape, user's own example) was excluded by design. Direct scan of the 110k stored edges found genuine same-money 2-hop loops (e.g. ₹5,00,000 out 07-Mar → ₹1,00,000 back 25-Apr between two statement accounts). Fixed `roundtrip.py`: close at ≥1 path edge (2-hop loops valid) + capped artifact at top-200 by score. Golden checks: 2-hop found, 3-hop planted still found, junk chain rejected; 14 detection tests green.
+- **Proof case `CEN/RT-DEMO/2026`** (user request): uploaded the two real statements involved (098030016134598.pdf + 958533930537174 pdf) → 11,338 txns parsed, analysis in 15s → **3 genuine round trips detected** (₹5L→₹1L 20%, 2×₹2L→₹65k 32.6%), graph 53 nodes/356 edges. REALDATA artifact recompute (full 110k-edge search) left running in background via docker exec.
+- **Digital signatures for every report**: backend `ReportSignature` model + `POST /reports/sign` (HMAC-SHA256 over case|type|content-hash|timestamp with `secret_key`, append-only + audit-logged) + `GET /reports/verify/{id}` (404 = fake). Frontend `lib/reportSigning.ts` (browser SHA-256 → sign → footer line "Digitally signed by TraceNet — Verification ID … — Signature …"); wired into ALL client reports (review PDF/Excel, flow-graph, money-trail, visual-analysis; Excel = signature row on Report sheet); unsigned-but-downloadable fallback when server unreachable. New "Verify a report" card on Reports page (✓ GENUINE with case/type/time, red NOT GENUINE on unknown ID). Mock adapter parity.
+- E2E verified on Docker stack: signed PDF's footer ID → verify endpoint → valid:true; fake ID → 404. Bug fixed along the way: NOT NULL violation (signature computed after flush → now computed pre-insert). Committed locally only.
+
+
+### 2026-07-05 — Session 30: real round trips only (same-money chain) + graph perf (NOT PUSHED)
+- User: loops must be genuine cycles — dates in order AND the same money returning. Investigation: backend DFS already enforces non-decreasing dates (all 172 REALDATA loops time-ordered) but never checks **amount continuity** — every stored loop is a chain of unrelated transfers (₹5 → ₹10,000 → ₹500 → … → ₹5, "returns" up to 1.2M%).
+- **Same-money rule** (hop amount 20%–120% of previous; closing hop 10%–150% of first): applied in BOTH layers. Frontend `meaningfulRoundTrips` memo filters stored artifacts instantly (panel/count/highlight/PDF/Excel all use it; top-25 card cap; "N chains hidden — the money did not genuinely return" note). Backend `roundtrip.py` DFS prunes non-continuous hops + validates the return band (**cross-lane change, user-directed** — noted in progress.md; also shrinks the DFS search space). Calibration: forge planted loop (480k→460k→120k, 25% back) passes; all junk shapes rejected — verified by direct golden script + 14 detection tests green (7 forge-regeneration test errors are the pre-existing poppler env issue).
+- **Perf**: MAX_EDGES 800; truncated cases get `textureOnViewport`/`hideEdgesOnViewport`/`pixelRatio:1`. REALDATA load 20s→13s, no errors; mock demo loop + animation intact.
+- ⚠️ Stored REALDATA artifacts still contain the 172 junk loops (frontend hides them); a future re-analysis with the fixed backend will write clean artifacts — but do NOT re-analyze the giant case until A resolves their uncommitted flowgraph.py revert (quadratic matcher). Committed locally only.
+
+
+### 2026-07-05 — Session 29: flow graph capped to old-style view; long tail hidden (user decision; NOT PUSHED)
+- User wanted the old 334-account look back and the other ~12k accounts hidden everywhere. Parser revert was the wrong lever (graph reads stored artifacts; reverting A's lane would also undo the accuracy fixes) — explained to user, implemented in the display layer instead: `MAX_NODES = 334`; account list + search now cover ONLY drawn accounts (full-graph search removed); `focusAccount` pruned-account fallback removed; drawer connections restricted to drawn edges; notice reworded to "Showing the N most relevant accounts" (no mention of the pruned tail). Small cases still pass through untouched.
+- Net effect on REALDATA: ~116 connected accounts drawn (334 cap minus edge-budget pruning), old visual format, ~20s load, no errors. Backend untouched; A's uncommitted local flowgraph.py edit left as-is. Committed locally only.
+
+
+### 2026-07-05 — Session 28: flow graph fixed for giant cases (NOT PUSHED per user)
+- User: flow graph stopped loading on `CEN/REALDATA/2026`. Diagnosis: a re-analysis regenerated the graph artifact at **12,193 nodes / 110,891 edges (28 MB)** (user's working screenshot was from an older 334-account run) — cytoscape+cose froze the tab.
+- Fix (`FlowGraphPage.tsx` only): `displayGraph` useMemo caps rendering above 400 nodes / 1,500 edges — keeps statements + suspicious accounts first, then busiest counterparties; edges ranked confirmed > probable > external by amount with **max 2 parallel edges per account pair** (hubs were eating the budget → hairball); isolated survivors dropped; truncated layout gets `idealEdgeLength/nodeOverlap` stretch. Roles still derived from the FULL graph; search covers the full 12k accounts (list display capped 250; clicking a pruned account still opens its drawer via full-graph data); PDF/Excel use drawn subset; notice line explains what's shown. Small cases pass through 100% untouched.
+- Verified on :3000 REALDATA: notice at 4.5s, full render ~20s, no page errors, 116 connected accounts drawn, 172 round trips listed. Build + lint clean; Docker web rebuilt locally. **Committed locally only — user said don't push.**
+
+
+### 2026-07-05 — Session 27: failed statements surfaced in Review step (re-upload / manual fix)
+- New `components/FailedStatements.tsx`, rendered at the top of the wizard Review step (also in the zero-transactions branch so all-failed cases still show it): lists case documents with `status === 'failed'`, plain-English reason (password / unsupported / unrecognized layout / raw error), and two actions per statement — **"⬆ Re-upload corrected file"** (hidden file input → `uploadDocument` → poll job → success/failure notice incl. 409 same-file guidance → refresh) and **"✎ Fix columns manually"** (existing `ColumnMappingModal`; template-saved and re-parse-job paths both handled).
+- Mock-parity fix: mock adapter now stores a failed Document row for password/unsupported failures too (mirrors real backend, which always creates the Document row before parsing).
+- Verified headless: protected PDF upload → red "Not read" card in Review; re-upload flow completes with success notice; mapping modal opens with columns. Build + lint clean; Docker web rebuilt; pushed.
+
+
 ### 2026-07-05 — Session 26: Golden Hour removed (user request)
 - Deleted `components/GoldenHourBoard.tsx` and its Dashboard usage (import + analyzed-gated block). Nothing else touched. Confirmed zero "golden hour" strings in the served bundle; freeze statuses only ever lived in localStorage (`tracenet.freeze.<caseId>`) so no backend/data cleanup needed. Deviation from plan.md §5.2 recorded in progress.md. Build + lint clean; Docker web rebuilt; pushed.
 

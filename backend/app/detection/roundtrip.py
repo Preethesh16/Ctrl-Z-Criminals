@@ -18,6 +18,16 @@ from .flowgraph import Edge
 
 MAX_HOPS = 6
 
+# Same-money chain: a cycle is only round-tripping if each hop carries a
+# comparable amount to the previous hop (mules take cuts — money can shrink,
+# not multiply) and the closing hop genuinely returns a meaningful share of
+# what left. Without this, time-ordered chains of unrelated transfers
+# (₹5 → ₹10,000 → ₹500 → …) get reported as loops.
+HOP_RATIO_MIN = 0.2
+HOP_RATIO_MAX = 1.2
+RETURN_MIN = 0.1
+RETURN_MAX = 1.5
+
 
 @dataclass
 class Loop:
@@ -57,7 +67,18 @@ def find_round_trips(edges: list[Edge], max_hops: int = MAX_HOPS) -> list[Loop]:
         for e in adjacency.get(node, []):
             if e.when < last.when:  # time must not run backwards
                 continue
-            if e.target == origin and len(path_edges) >= 2:
+            # same-money chain: this hop must carry a comparable amount
+            if last.amount <= 0 or e.amount <= 0:
+                continue
+            ratio = float(e.amount / last.amount)
+            if ratio < HOP_RATIO_MIN or ratio > HOP_RATIO_MAX:
+                continue
+            # closing the loop — 2-hop A→B→A is valid round-tripping too
+            if e.target == origin and len(path_edges) >= 1:
+                first = path_edges[0]
+                returned = float(e.amount / first.amount) if first.amount else 0.0
+                if returned < RETURN_MIN or returned > RETURN_MAX:
+                    continue
                 cycle = [*path_edges, e]
                 sig = tuple(sorted(id(x) for x in cycle))
                 if sig in seen_signatures:
@@ -81,7 +102,9 @@ def find_round_trips(edges: list[Edge], max_hops: int = MAX_HOPS) -> list[Loop]:
         key = (frozenset(lp.path), lp.edges[-1].when)
         if key not in unique or lp.score > unique[key].score:
             unique[key] = lp
-    return sorted(unique.values(), key=lambda x: -x.score)
+    # bounded artifact: giant batch cases can produce thousands of valid
+    # 2-hop loops between busy pairs — keep the strongest
+    return sorted(unique.values(), key=lambda x: -x.score)[:200]
 
 
 def _score(cycle: list[Edge]) -> Loop:

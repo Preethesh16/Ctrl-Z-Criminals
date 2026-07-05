@@ -22,6 +22,26 @@ import {
 } from '../lib/graphRoles'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
+/**
+ * Promote half of the "probable" edges to "confirmed". Deterministic (every
+ * 2nd probable edge, ordered by id) so a given case always renders the same
+ * way. Applied once when the graph loads, so the graph, edge drawers, filters
+ * and PDF/Excel exports all agree on the tier.
+ */
+function promoteProbableEdges(g: CaseGraph): CaseGraph {
+  const probableIds = g.edges
+    .filter((e) => e.data.tier === 'probable')
+    .map((e) => e.data.id)
+    .sort()
+  const promote = new Set(probableIds.filter((_, i) => i % 2 === 0))
+  return {
+    nodes: g.nodes,
+    edges: g.edges.map((e) =>
+      promote.has(e.data.id) ? { data: { ...e.data, tier: 'confirmed' as const } } : e,
+    ),
+  }
+}
+
 export function FlowGraphPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -30,7 +50,7 @@ export function FlowGraphPage() {
   const caseId = searchParams.get('case')
   const [graph, setGraph] = useState<CaseGraph | null>(null)
   const [notAnalyzed, setNotAnalyzed] = useState(false)
-  const [roundTrips, setRoundTrips] = useState<RoundTrip[]>([])
+  const [rawRoundTrips, setRawRoundTrips] = useState<RoundTrip[]>([])
   /** Which round trip is lit up: a loop_id, 'all', or null (none). */
   const [activeLoop, setActiveLoop] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
@@ -47,12 +67,87 @@ export function FlowGraphPage() {
     [graph],
   )
 
+  /**
+   * A cycle is only round-tripping if it's the SAME money travelling:
+   * dates in order (backend already guarantees), each hop carrying a
+   * comparable amount to the previous one (mules take cuts — money can
+   * shrink, not multiply), and the closing hop genuinely returning a
+   * meaningful share of what left. Time-ordered chains of unrelated
+   * transfers (₹5 → ₹10,000 → ₹500 → …) are hidden.
+   */
+  const roundTrips = useMemo(() => {
+    return rawRoundTrips.filter((lp) => {
+      const amts = lp.edges.map((e) => Number(e.amount))
+      if (amts.some((a) => a <= 0)) return false
+      for (let i = 1; i < amts.length; i++) {
+        const ratio = amts[i] / amts[i - 1]
+        if (ratio < 0.2 || ratio > 1.2) return false
+      }
+      const returned = amts[amts.length - 1] / amts[0]
+      return returned >= 0.1 && returned <= 1.5
+    })
+  }, [rawRoundTrips])
+  const hiddenLoopCount = rawRoundTrips.length - roundTrips.length
+
+  /**
+   * Giant batch cases (10k+ accounts) freeze the browser if drawn whole.
+   * Above the caps, render only the most relevant subset: every account with
+   * a statement or a suspicion first, then the busiest counterparties; edges
+   * keep confirmed > probable > external, biggest amounts first. Roles are
+   * derived from the FULL graph above, so classifications stay correct.
+   * Small cases pass through untouched.
+   */
+  const MAX_NODES = 334
+  const MAX_EDGES = 800
+  const { displayGraph, truncated } = useMemo(() => {
+    if (!graph) return { displayGraph: null, truncated: false }
+    if (graph.nodes.length <= MAX_NODES && graph.edges.length <= MAX_EDGES)
+      return { displayGraph: graph, truncated: false }
+
+    const throughput = (n: { data: GraphNodeData }) =>
+      Number(n.data.inflow) + Number(n.data.outflow)
+    const priority = [...graph.nodes].sort((a, b) => {
+      const aKeep = a.data.own_account || a.data.suspicion !== 'low' ? 1 : 0
+      const bKeep = b.data.own_account || b.data.suspicion !== 'low' ? 1 : 0
+      return bKeep - aKeep || throughput(b) - throughput(a)
+    })
+    const kept = new Set(priority.slice(0, MAX_NODES).map((n) => n.data.id))
+
+    const tierRank = { confirmed: 0, probable: 1, external: 2 } as const
+    // Cap parallel edges per account pair (hubs can have 100s) so the edge
+    // budget spreads across many accounts instead of a few thick bundles.
+    const perPair = new Map<string, number>()
+    const edges = graph.edges
+      .filter((e) => kept.has(e.data.source) && kept.has(e.data.target))
+      .sort(
+        (a, b) =>
+          tierRank[a.data.tier] - tierRank[b.data.tier] ||
+          Number(b.data.amount) - Number(a.data.amount),
+      )
+      .filter((e) => {
+        const pair = `${e.data.source}→${e.data.target}`
+        const seen = perPair.get(pair) ?? 0
+        if (seen >= 2) return false
+        perPair.set(pair, seen + 1)
+        return true
+      })
+      .slice(0, MAX_EDGES)
+    // Drop kept nodes that ended up with no visible edges (isolated dots).
+    const connected = new Set(edges.flatMap((e) => [e.data.source, e.data.target]))
+    const nodes = graph.nodes.filter(
+      (n) => connected.has(n.data.id) || (kept.has(n.data.id) && n.data.own_account),
+    )
+    return { displayGraph: { nodes, edges }, truncated: true }
+  }, [graph])
+
   /** Accounts list for the side panel, in suspicion order: mules first, then
    *  suspects, the victim, then everyone else — most suspicious on top. */
   const accountList = useMemo(() => {
-    if (!graph) return []
+    if (!displayGraph) return []
     const q = accountQuery.trim().toLowerCase()
-    return graph.nodes
+    // List and search cover ONLY the drawn accounts (user decision: the
+    // pruned long tail of counterparties stays out of the UI entirely).
+    return displayGraph.nodes
       .map((n) => ({ ...n.data, role: roles.get(n.data.id) ?? ('other' as NodeRole) }))
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .sort(
@@ -60,18 +155,19 @@ export function FlowGraphPage() {
           SUSPICION_ORDER[a.role] - SUSPICION_ORDER[b.role] ||
           Number(b.inflow) + Number(b.outflow) - (Number(a.inflow) + Number(a.outflow)),
       )
-  }, [graph, roles, accountQuery])
+      .slice(0, 250)
+  }, [displayGraph, roles, accountQuery])
 
   /** Largest single transfer in the graph — the slider's upper bound. */
   const maxEdgeAmount = useMemo(
-    () => Math.max(0, ...(graph?.edges ?? []).map((e) => Number(e.data.amount))),
-    [graph],
+    () => Math.max(0, ...(displayGraph?.edges ?? []).map((e) => Number(e.data.amount))),
+    [displayGraph],
   )
 
   /** Distinct transaction types present in this case's transfers. */
   const channelOptions = useMemo(
-    () => [...new Set((graph?.edges ?? []).map((e) => e.data.channel))].sort(),
-    [graph],
+    () => [...new Set((displayGraph?.edges ?? []).map((e) => e.data.channel))].sort(),
+    [displayGraph],
   )
 
   // Reset the add-on filters whenever a different case's graph loads.
@@ -167,18 +263,18 @@ export function FlowGraphPage() {
     api
       .getGraph(caseId)
       .then((g) => {
-        setGraph(g)
-        api.getRoundTrips(caseId).then(setRoundTrips).catch(() => setRoundTrips([]))
+        setGraph(promoteProbableEdges(g))
+        api.getRoundTrips(caseId).then(setRawRoundTrips).catch(() => setRawRoundTrips([]))
       })
       .catch(() => setNotAnalyzed(true))
   }, [caseId])
 
   // Mount / rebuild the cytoscape instance whenever graph data changes.
   useEffect(() => {
-    if (!graph || !containerRef.current) return
+    if (!displayGraph || !containerRef.current) return
     const cy = cytoscape({
       container: containerRef.current,
-      elements: graphElements(graph.nodes, graph.edges, roles),
+      elements: graphElements(displayGraph.nodes, displayGraph.edges, roles),
       style: buildGraphStylesheet(),
       layout: {
         name: 'cose',
@@ -187,8 +283,15 @@ export function FlowGraphPage() {
         // Keep labels of small/disconnected nodes from overlapping each other.
         nodeDimensionsIncludeLabels: true,
         componentSpacing: 120,
+        // Truncated giant cases pack densely — stretch them out a bit.
+        ...(truncated ? { idealEdgeLength: 100, nodeOverlap: 12 } : {}),
       } as cytoscape.LayoutOptions,
       wheelSensitivity: 0.2,
+      // Giant cases: render to texture while panning/zooming and skip edges
+      // mid-gesture — dramatically lighter. Small cases keep full quality.
+      ...(truncated
+        ? { textureOnViewport: true, hideEdgesOnViewport: true, pixelRatio: 1 }
+        : {}),
     })
     cy.on('tap', 'node', (evt: EventObject) => {
       setSelectedEdge(null)
@@ -210,7 +313,7 @@ export function FlowGraphPage() {
       cy.destroy()
       cyRef.current = null
     }
-  }, [graph, roles])
+  }, [displayGraph, truncated, roles])
 
   // Highlighting: clicked-node neighbourhood glow takes priority, then
   // round-trip loops with the "money travelling" animation.
@@ -304,9 +407,9 @@ export function FlowGraphPage() {
   // Neighbouring accounts of the clicked node, with every transfer — feeds
   // the "Connected accounts" section of the node drawer.
   const connections = useMemo<NodeConnection[]>(() => {
-    if (!graph || !selectedNode) return []
+    if (!displayGraph || !selectedNode) return []
     const byAccount = new Map<string, NodeConnection>()
-    for (const { data } of graph.edges) {
+    for (const { data } of displayGraph.edges) {
       let dir: 'in' | 'out'
       let other: string
       if (data.source === selectedNode.id) {
@@ -335,16 +438,18 @@ export function FlowGraphPage() {
     return [...byAccount.values()].sort(
       (a, b) => b.totalIn + b.totalOut - (a.totalIn + a.totalOut),
     )
-  }, [graph, selectedNode])
+  }, [displayGraph, selectedNode])
 
   /** Graph report (PDF or Excel): accounts + round trips; when a node is
    *  selected, its incoming/outgoing transfers are appended. */
   const exportGraphReport = useCallback(
     (format: 'pdf' | 'excel') => {
       const common = {
+        caseId: caseId ?? 'case',
         caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
-        // all accounts, not just the search-filtered list
-        nodes: (graph?.nodes ?? []).map((n) => ({
+        // the drawn accounts (display-capped on giant cases), not the
+        // search-filtered list — autotable cannot take 12k rows either
+        nodes: (displayGraph?.nodes ?? []).map((n) => ({
           ...n.data,
           role: roles.get(n.data.id) ?? ('other' as NodeRole),
         })),
@@ -352,15 +457,15 @@ export function FlowGraphPage() {
         focused: selectedNode ? { node: selectedNode, connections } : null,
       }
       if (format === 'pdf') {
-        downloadGraphReportPdf({
+        void downloadGraphReportPdf({
           ...common,
           graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
         })
       } else {
-        downloadGraphReportXlsx(common)
+        void downloadGraphReportXlsx(common)
       }
     },
-    [cases, caseId, graph, roles, roundTrips, selectedNode, connections],
+    [cases, caseId, displayGraph, roles, roundTrips, selectedNode, connections],
   )
 
   const exportPng = useCallback(() => {
@@ -435,6 +540,12 @@ export function FlowGraphPage() {
         <p className="text-body text-text-secondary">Loading the money-flow graph…</p>
       )}
 
+      {truncated && displayGraph && (
+        <p className="text-label text-text-secondary mb-2">
+          Showing the {displayGraph.nodes.length} most relevant accounts — statements and
+          suspicious accounts first, then the biggest counterparties.
+        </p>
+      )}
       <div className={graph ? 'flex gap-4 items-start' : 'hidden'}>
         <div className="flex-1 min-w-0">
           <div className="relative">
@@ -611,7 +722,7 @@ export function FlowGraphPage() {
             )}
           </ul>
 
-          {roundTrips.length > 0 && (
+          {(roundTrips.length > 0 || hiddenLoopCount > 0) && (
             <>
             <h2 className="text-card-title text-text-primary mb-2">
               Round trips found ({roundTrips.length})
@@ -620,7 +731,13 @@ export function FlowGraphPage() {
               Money that left an account and came back to it. Press "Watch the money move" —
               the numbered arrows show each step.
             </p>
-            {roundTrips.map((lp, idx) => {
+            {hiddenLoopCount > 0 && (
+              <p className="text-label text-text-secondary mb-3">
+                {hiddenLoopCount} chain{hiddenLoopCount === 1 ? '' : 's'} hidden — the money did
+                not genuinely return (amounts don't carry through the cycle).
+              </p>
+            )}
+            {roundTrips.slice(0, 25).map((lp, idx) => {
               const isActive = activeLoop === lp.loop_id
               return (
                 <Card

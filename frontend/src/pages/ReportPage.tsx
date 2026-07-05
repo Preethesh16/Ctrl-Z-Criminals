@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, exportDownloadUrl } from '../api/client'
-import type { CaseOut, ExportKind, Trail, TransactionOut } from '../api/types'
+import type { CaseOut, ExportKind, ReportVerification, Trail, TransactionOut } from '../api/types'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { DownloadChoice } from '../components/ui/DownloadChoice'
+import { downloadAccountFinalReportPdf, downloadAccountFinalReportXlsx } from '../lib/accountReport'
 import { downloadVisualAnalysisPdf, renderGraphPngOffscreen } from '../lib/analysisPdf'
 import { downloadVisualAnalysisXlsx } from '../lib/analysisXlsx'
+import { deriveRoles, ROLE_LABEL, SUSPICION_ORDER, type NodeRole } from '../lib/graphRoles'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
 const DOWNLOADS: Array<{ kind: ExportKind; label: string; description: string }> = [
@@ -64,9 +66,9 @@ export function ReportPage() {
       const caseLabel = cases?.find((c) => c.id === caseId)?.fir_number ?? caseId
       if (format === 'pdf') {
         const graphPng = await renderGraphPngOffscreen(graph)
-        downloadVisualAnalysisPdf({ caseLabel, graph, graphPng, roundTrips, trails, disposition })
+        await downloadVisualAnalysisPdf({ caseId, caseLabel, graph, graphPng, roundTrips, trails, disposition })
       } else {
-        downloadVisualAnalysisXlsx({ caseLabel, graph, roundTrips, trails, disposition })
+        await downloadVisualAnalysisXlsx({ caseId, caseLabel, graph, roundTrips, trails, disposition })
       }
     } catch {
       setVisualError('Could not build the visual analysis — run the case analysis first.')
@@ -189,6 +191,11 @@ export function ReportPage() {
               />
               {visualError && <p className="text-label text-danger mt-2">{visualError}</p>}
             </Card>
+            <AccountFinalReportCard
+              caseId={caseId}
+              caseLabel={cases?.find((c) => c.id === caseId)?.fir_number ?? caseId}
+            />
+            <VerifyReportCard />
             <p className="text-label text-text-secondary">
               Every download is recorded in the case audit log with its file size — the evidence
               chain stays intact. If the backend is reachable, the download works even when the
@@ -198,5 +205,162 @@ export function ReportPage() {
         </div>
       )}
     </motion.div>
+  )
+}
+
+/**
+ * Final report for one selected account — layered charge-sheet annexure:
+ * summary + checklist, suspicious transactions only, the account's money
+ * flow, its round trips, money trails and the evidence chain.
+ */
+function AccountFinalReportCard({ caseId, caseLabel }: { caseId: string; caseLabel: string }) {
+  const [accounts, setAccounts] = useState<Array<{ id: string; label: string; role: NodeRole }> | null>(null)
+  const [selected, setSelected] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setAccounts(null)
+    setSelected('')
+    api
+      .getGraph(caseId)
+      .then((graph) => {
+        const roles = deriveRoles(graph.nodes, graph.edges)
+        const list = graph.nodes
+          .map((n) => ({
+            id: n.data.id,
+            label: n.data.label.replace('ext:', ''),
+            role: roles.get(n.data.id) ?? ('other' as NodeRole),
+          }))
+          .sort((a, b) => SUSPICION_ORDER[a.role] - SUSPICION_ORDER[b.role])
+          .slice(0, 200)
+        setAccounts(list)
+        if (list.length > 0) setSelected(list[0].id)
+      })
+      .catch(() => setAccounts([]))
+  }, [caseId])
+
+  async function generate(format: 'pdf' | 'excel') {
+    if (!selected) return
+    setBusy(true)
+    setError('')
+    try {
+      const opts = { caseId, caseLabel, accountId: selected }
+      if (format === 'pdf') await downloadAccountFinalReportPdf(opts)
+      else await downloadAccountFinalReportXlsx(opts)
+    } catch {
+      setError('Could not build the report — run the case analysis first.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="!p-4">
+      <div className="text-card-title text-text-primary mb-1">
+        Final report — single account
+      </div>
+      <p className="text-label text-text-secondary mb-3">
+        Charge-sheet style: summary + checklist, suspicious transactions only, the account's
+        money flow, round-tripping, money trails and the evidence chain
+      </p>
+      {accounts === null ? (
+        <p className="text-label text-text-secondary">Loading accounts…</p>
+      ) : accounts.length === 0 ? (
+        <p className="text-label text-text-secondary">
+          No analyzed accounts yet — run the analysis first.
+        </p>
+      ) : (
+        <>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="mb-3 w-full rounded-control border border-border bg-surface px-3 py-2 text-body"
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {ROLE_LABEL[a.role] !== '—' ? `[${ROLE_LABEL[a.role]}] ` : ''}
+                {a.label}
+              </option>
+            ))}
+          </select>
+          <DownloadChoice
+            label="Generate final report"
+            variant="primary"
+            busy={busy}
+            onPdf={() => void generate('pdf')}
+            onExcel={() => void generate('excel')}
+          />
+        </>
+      )}
+      {error && <p className="text-label text-danger mt-2">{error}</p>}
+    </Card>
+  )
+}
+
+/**
+ * Authenticity check: every report this system generates carries a
+ * Verification ID in its footer. Enter it here — a genuine report resolves
+ * to its case and signing time; an unknown ID means the document is fake.
+ */
+function VerifyReportCard() {
+  const [verifyId, setVerifyId] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [result, setResult] = useState<ReportVerification | null>(null)
+  const [failMessage, setFailMessage] = useState('')
+
+  async function check() {
+    const token = verifyId.trim().replace(/[….\s]+$/, '')
+    if (!token) return
+    setChecking(true)
+    setResult(null)
+    setFailMessage('')
+    try {
+      setResult(await api.verifyReport(token))
+    } catch {
+      setFailMessage(
+        '✕ NOT GENUINE — this verification ID is not in our records. The report was not generated by this system (or the ID was mistyped).',
+      )
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <Card className="!p-4">
+      <div className="text-card-title text-text-primary mb-1">Verify a report</div>
+      <p className="text-label text-text-secondary mb-3">
+        Paste a Verification ID, a Signature, or any SHA-256 evidence hash from a report to
+        confirm it was genuinely generated by this system
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={verifyId}
+          onChange={(e) => setVerifyId(e.target.value)}
+          placeholder="Verification ID or Signature…"
+          className="flex-1 min-w-0 rounded-control border border-border bg-surface px-3 py-2 text-body"
+          onKeyDown={(e) => e.key === 'Enter' && void check()}
+        />
+        <Button onClick={check} disabled={checking || !verifyId.trim()}>
+          {checking ? '…' : 'Check'}
+        </Button>
+      </div>
+      {result && (
+        <div className="mt-3 rounded-control bg-success-soft p-3">
+          <p className="text-body text-success font-medium">
+            ✓ GENUINE {result.valid ? '' : '(record found, but signature mismatch — investigate)'}
+          </p>
+          <p className="text-label text-text-secondary mt-1">
+            {result.report_type} for case {result.fir_number ?? result.case_id} · recorded{' '}
+            {new Date(result.signed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
+          </p>
+        </div>
+      )}
+      {failMessage && (
+        <p className="mt-3 rounded-control bg-danger-soft p-3 text-body text-danger">
+          {failMessage}
+        </p>
+      )}
+    </Card>
   )
 }

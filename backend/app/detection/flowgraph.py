@@ -68,13 +68,24 @@ def build_edges(txns: list) -> list[Edge]:
             used.update((d.id, match.id))
 
     # --- tier 2: temporal-amount match (no shared reference)
+    # Candidates are bucketed by date so huge cases stay tractable: a match
+    # must share the debit's date (date-only rows) or fall within 30 minutes
+    # (timed rows — the next-day bucket covers midnight crossings). Semantics
+    # are identical to scanning all credits in time order.
     debits = sorted((t for t in rows if t.direction == "DEBIT" and t.id not in used), key=_ts)
     credits = sorted((t for t in rows if t.direction == "CREDIT" and t.id not in used), key=_ts)
+    credits_by_date: dict = defaultdict(list)
+    for c in credits:
+        credits_by_date[c.txn_date].append(c)
     for d in debits:
-        for c in credits:
+        if d.amount_inr == 0:
+            continue
+        candidates = credits_by_date.get(d.txn_date, [])
+        if isinstance(d.txn_time, time):
+            candidates = [*candidates,
+                          *credits_by_date.get(d.txn_date + timedelta(days=1), [])]
+        for c in candidates:
             if c.id in used or c.account_ref == d.account_ref:
-                continue
-            if d.amount_inr == 0:
                 continue
             fee_ok = abs(c.amount_inr - d.amount_inr) <= d.amount_inr * Decimal("0.02")
             has_times = isinstance(d.txn_time, time) and isinstance(c.txn_time, time)

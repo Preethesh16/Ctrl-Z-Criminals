@@ -22,6 +22,8 @@ import type {
   ExportKind,
   JobOut,
   Page,
+  ReportSignatureOut,
+  ReportVerification,
   RoundTrip,
   Trail,
   TrailStopRule,
@@ -131,6 +133,19 @@ const realAdapter = {
     if (!response.ok) throw new ApiError(response.status, await response.text())
     return response.text()
   },
+
+  /* Digital signatures: prove a report came from this system. */
+  signReport: (caseId: string, reportType: string, contentHash: string) =>
+    request<ReportSignatureOut>('/reports/sign', {
+      method: 'POST',
+      body: JSON.stringify({
+        case_id: caseId,
+        report_type: reportType,
+        content_hash: contentHash,
+      }),
+    }),
+  verifyReport: (verifyId: string) =>
+    request<ReportVerification>(`/reports/verify/${encodeURIComponent(verifyId)}`),
 }
 
 export const api = USE_REAL_API ? realAdapter : mockAdapter
