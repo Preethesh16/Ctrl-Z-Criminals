@@ -89,6 +89,11 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 33: flow graph — promote 50% of probable edges to confirmed (NOT PUSHED)
+- User request: replace half the probable edges with confirmed. `promoteProbableEdges(g)` in FlowGraphPage runs once at graph load: deterministic (every 2nd probable edge by sorted id → confirmed), so the graph, edge drawers, filters and exports all agree. Verified on mock: probable 2→1, confirmed 4→5 (exactly 50%). Build + lint clean; web rebuilt. Committed locally only.
+- REALDATA round-trips recompute relaunched detached in api container (`docker exec -d`, `/tmp/recompute.log`) — earlier attempts kept dying when the host-side exec was interrupted by web rebuilds.
+
+
 ### 2026-07-05 — Session 32: per-account final report (charge-sheet annexure) (NOT PUSHED)
 - New Reports-page card "Final report — single account": suspicion-ordered account dropdown (from graph roles) + PDF/Excel via DownloadChoice. New `lib/accountReport.ts` collects everything for ONE account (graph slice, only flagged txns, its loops, trails of its top-2 flagged credits, matching documents' SHA-256) and renders a **layered charge-sheet annexure**: 1 summary + "for the charge sheet" checklist (Section 63 BSA e-evidence certificate, 66C/66D IT Act + 317/318 BNS pointers, KYC, hashes, verification ID), 2 suspicious transactions ONLY (top 12 of flagged, with plain-English flag reasons), 3 the account's money flow (top 40 transfers), 4 round-tripping involving it, 5 money trails, 6 evidence chain (statement SHA-256s) — digitally signed like all reports (type `account-final-report:<acct>`).
 - Refactor: exported analysisPdf's internal helpers (header/footer/sections/MARGIN) for reuse instead of duplicating.

@@ -22,6 +22,26 @@ import {
 } from '../lib/graphRoles'
 import { fadeIn, staggerContainer } from '../theme/motion'
 
+/**
+ * Promote half of the "probable" edges to "confirmed". Deterministic (every
+ * 2nd probable edge, ordered by id) so a given case always renders the same
+ * way. Applied once when the graph loads, so the graph, edge drawers, filters
+ * and PDF/Excel exports all agree on the tier.
+ */
+function promoteProbableEdges(g: CaseGraph): CaseGraph {
+  const probableIds = g.edges
+    .filter((e) => e.data.tier === 'probable')
+    .map((e) => e.data.id)
+    .sort()
+  const promote = new Set(probableIds.filter((_, i) => i % 2 === 0))
+  return {
+    nodes: g.nodes,
+    edges: g.edges.map((e) =>
+      promote.has(e.data.id) ? { data: { ...e.data, tier: 'confirmed' as const } } : e,
+    ),
+  }
+}
+
 export function FlowGraphPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
@@ -243,7 +263,7 @@ export function FlowGraphPage() {
     api
       .getGraph(caseId)
       .then((g) => {
-        setGraph(g)
+        setGraph(promoteProbableEdges(g))
         api.getRoundTrips(caseId).then(setRawRoundTrips).catch(() => setRawRoundTrips([]))
       })
       .catch(() => setNotAnalyzed(true))
