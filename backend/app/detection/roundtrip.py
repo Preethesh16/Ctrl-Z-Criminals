@@ -73,7 +73,8 @@ def find_round_trips(edges: list[Edge], max_hops: int = MAX_HOPS) -> list[Loop]:
             ratio = float(e.amount / last.amount)
             if ratio < HOP_RATIO_MIN or ratio > HOP_RATIO_MAX:
                 continue
-            if e.target == origin and len(path_edges) >= 2:
+            # closing the loop — 2-hop A→B→A is valid round-tripping too
+            if e.target == origin and len(path_edges) >= 1:
                 first = path_edges[0]
                 returned = float(e.amount / first.amount) if first.amount else 0.0
                 if returned < RETURN_MIN or returned > RETURN_MAX:
@@ -101,7 +102,9 @@ def find_round_trips(edges: list[Edge], max_hops: int = MAX_HOPS) -> list[Loop]:
         key = (frozenset(lp.path), lp.edges[-1].when)
         if key not in unique or lp.score > unique[key].score:
             unique[key] = lp
-    return sorted(unique.values(), key=lambda x: -x.score)
+    # bounded artifact: giant batch cases can produce thousands of valid
+    # 2-hop loops between busy pairs — keep the strongest
+    return sorted(unique.values(), key=lambda x: -x.score)[:200]
 
 
 def _score(cycle: list[Edge]) -> Loop:

@@ -19,6 +19,7 @@ import {
   type NodeConnection,
   type NodeRole,
 } from './graphRoles'
+import { signatureLine, signReportContent, type ReportSignature } from './reportSigning'
 
 type RoledNode = GraphNodeData & { role: NodeRole }
 
@@ -51,11 +52,13 @@ function reportSheet(
   title: string,
   caseLabel: string,
   sections: ReportSection[],
+  sig?: ReportSignature | null,
 ): void {
   const aoa: unknown[][] = [
     [title],
     [`Case: ${caseLabel}`],
     [`Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`],
+    [signatureLine(sig ?? null)],
     [],
   ]
   for (const s of sections) {
@@ -125,12 +128,18 @@ function trailRows(trail: Trail, roles: Map<string, NodeRole>): Array<Record<str
 }
 
 /** Flow Graph page: accounts + round trips (+ focused account transfers). */
-export function downloadGraphReportXlsx(opts: {
+export async function downloadGraphReportXlsx(opts: {
+  caseId: string
   caseLabel: string
   nodes: RoledNode[]
   roundTrips: RoundTrip[]
   focused?: { node: GraphNodeData; connections: NodeConnection[] } | null
-}): void {
+}): Promise<void> {
+  const sig = await signReportContent(opts.caseId, 'flow-graph-report', {
+    nodes: opts.nodes,
+    roundTrips: opts.roundTrips,
+    focused: opts.focused ?? null,
+  })
   const wb = XLSX.utils.book_new()
   const mules = opts.nodes.filter((n) => n.role === 'mule').length
   const suspects = opts.nodes.filter((n) => n.role === 'suspect').length
@@ -170,7 +179,7 @@ export function downloadGraphReportXlsx(opts: {
           },
         ]
       : []),
-  ])
+  ], sig)
   summarySheet(wb, opts.caseLabel, summaryFacts)
   sheet(wb, 'Accounts', accountRows(opts.nodes))
   if (opts.roundTrips.length > 0) sheet(wb, 'Round trips', roundTripRows(opts.roundTrips))
@@ -179,12 +188,17 @@ export function downloadGraphReportXlsx(opts: {
 }
 
 /** Money Trail page: summary + layer-by-layer hops. */
-export function downloadTrailReportXlsx(opts: {
+export async function downloadTrailReportXlsx(opts: {
+  caseId: string
   caseLabel: string
   credit: TransactionOut
   trail: Trail
   roles?: Map<string, NodeRole>
-}): void {
+}): Promise<void> {
+  const sig = await signReportContent(opts.caseId, 'money-trail-report', {
+    credit: opts.credit.id,
+    trail: opts.trail,
+  })
   const wb = XLSX.utils.book_new()
   const facts: Array<[string, string]> = [
     ['Credit followed (INR)', opts.credit.amount_inr],
@@ -199,7 +213,7 @@ export function downloadTrailReportXlsx(opts: {
   reportSheet(wb, 'TraceNet — Money Trail Report', opts.caseLabel, [
     { title: 'Summary', facts },
     { title: 'Money trail — layer by layer', rows },
-  ])
+  ], sig)
   summarySheet(wb, opts.caseLabel, facts)
   sheet(wb, 'Trail', rows)
   XLSX.writeFile(
@@ -209,18 +223,25 @@ export function downloadTrailReportXlsx(opts: {
 }
 
 /** Report page: all three features in one workbook. */
-export function downloadVisualAnalysisXlsx(opts: {
+export async function downloadVisualAnalysisXlsx(opts: {
+  caseId: string
   caseLabel: string
   graph: CaseGraph
   roundTrips: RoundTrip[]
   trails: Array<{ credit: TransactionOut; trail: Trail }>
   disposition: Disposition | null
-}): void {
+}): Promise<void> {
   const roles = deriveRoles(opts.graph.nodes, opts.graph.edges)
   const nodes: RoledNode[] = opts.graph.nodes.map((n) => ({
     ...n.data,
     role: roles.get(n.data.id) ?? 'other',
   }))
+  const sig = await signReportContent(opts.caseId, 'visual-analysis-report', {
+    roundTrips: opts.roundTrips,
+    trails: opts.trails.map((t) => ({ credit: t.credit.id, trail: t.trail })),
+    disposition: opts.disposition,
+    accounts: nodes.length,
+  })
   const wb = XLSX.utils.book_new()
   const facts: Array<[string, string]> = [
     ['Accounts in graph', String(nodes.length)],
@@ -249,7 +270,7 @@ export function downloadVisualAnalysisXlsx(opts: {
     ...(dispositionRows
       ? [{ title: 'Disposition — how the money finally left', rows: dispositionRows }]
       : []),
-  ])
+  ], sig)
   summarySheet(wb, opts.caseLabel, facts)
   sheet(wb, 'Accounts', accountRows(nodes))
   if (opts.roundTrips.length > 0) sheet(wb, 'Round trips', roundTripRows(opts.roundTrips))

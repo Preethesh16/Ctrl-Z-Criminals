@@ -283,6 +283,25 @@ export interface Disposition {
 
 export type ExportKind = 'report.pdf' | 'standardized.pdf' | 'case.xlsx'
 
+/** POST /reports/sign — server-side HMAC signature for a generated report. */
+export interface ReportSignatureOut {
+  verify_id: string
+  signature: string
+  signed_at: string
+  case_id: string
+  report_type: string
+}
+
+/** GET /reports/verify/{id} — authenticity check result. */
+export interface ReportVerification {
+  valid: boolean
+  case_id: string
+  fir_number: string | null
+  report_type: string
+  content_hash: string
+  signed_at: string
+}
+
 export type TrailStopRule = 'tranche' | 'balance'
 
 export interface TrailHop {

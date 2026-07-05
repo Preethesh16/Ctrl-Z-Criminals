@@ -425,6 +425,7 @@ export function FlowGraphPage() {
   const exportGraphReport = useCallback(
     (format: 'pdf' | 'excel') => {
       const common = {
+        caseId: caseId ?? 'case',
         caseLabel: cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case',
         // the drawn accounts (display-capped on giant cases), not the
         // search-filtered list — autotable cannot take 12k rows either
@@ -436,12 +437,12 @@ export function FlowGraphPage() {
         focused: selectedNode ? { node: selectedNode, connections } : null,
       }
       if (format === 'pdf') {
-        downloadGraphReportPdf({
+        void downloadGraphReportPdf({
           ...common,
           graphPng: cyRef.current?.png({ full: true, scale: 2, bg: '#ffffff' }) ?? null,
         })
       } else {
-        downloadGraphReportXlsx(common)
+        void downloadGraphReportXlsx(common)
       }
     },
     [cases, caseId, displayGraph, roles, roundTrips, selectedNode, connections],

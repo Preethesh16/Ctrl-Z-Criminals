@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { api } from '../api/client'
 import type { TransactionOut } from '../api/types'
+import { signatureLine, signReportContent } from './reportSigning'
 
 /** Server page size used when pulling the full case for the report. */
 const REPORT_PAGE_SIZE = 500
@@ -57,6 +58,7 @@ export async function downloadReviewReportPdf(
   const reviewed = rows.filter((t) => !t.needs_review && !t.excluded).length
   const pending = rows.filter((t) => t.needs_review && !t.excluded).length
   const excluded = rows.filter((t) => t.excluded).length
+  const sig = await signReportContent(caseId, 'review-report', rows)
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
@@ -136,11 +138,9 @@ export async function downloadReviewReportPdf(
       const page = doc.getCurrentPageInfo().pageNumber
       doc.setFontSize(8)
       doc.setTextColor(120)
-      doc.text(
-        `TraceNet review report — ${firNumber ?? caseId} — page ${page}`,
-        40,
-        doc.internal.pageSize.getHeight() - 20,
-      )
+      const h = doc.internal.pageSize.getHeight()
+      doc.text(`TraceNet review report — ${firNumber ?? caseId} — page ${page}`, 40, h - 20)
+      doc.text(signatureLine(sig), 40, h - 32)
       doc.setTextColor(0)
     },
   })
@@ -166,6 +166,7 @@ export async function downloadReviewReportXlsx(
   const totalCredit = rows
     .filter((t) => t.direction === 'CREDIT' && !t.excluded)
     .reduce((s, t) => s + Number(t.amount_inr), 0)
+  const sig = await signReportContent(caseId, 'review-report', rows)
 
   const summaryFacts: Array<[string, string]> = [
     ['Case', firNumber ?? caseId],
@@ -219,6 +220,7 @@ export async function downloadReviewReportXlsx(
     wb,
     XLSX.utils.aoa_to_sheet([
       ['TraceNet — Transaction Review Report'],
+      [signatureLine(sig)],
       ...summaryFacts.map(([k, v]) => [k, v]),
       [],
       txnHeader,

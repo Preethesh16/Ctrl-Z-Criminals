@@ -41,12 +41,13 @@ export function MoneyTrailPage() {
     setExporting(true)
     try {
       const caseLabel = cases?.find((c) => c.id === caseId)?.fir_number ?? caseId ?? 'case'
+      const cid = caseId ?? 'case'
       if (format === 'pdf') {
         const svg = sankeyRef.current?.querySelector('svg') ?? null
         const sankeyPng = svg ? await svgToPng(svg) : null
-        downloadTrailReportPdf({ caseLabel, credit: selectedCredit, trail, sankeyPng, roles })
+        await downloadTrailReportPdf({ caseId: cid, caseLabel, credit: selectedCredit, trail, sankeyPng, roles })
       } else {
-        downloadTrailReportXlsx({ caseLabel, credit: selectedCredit, trail, roles })
+        await downloadTrailReportXlsx({ caseId: cid, caseLabel, credit: selectedCredit, trail, roles })
       }
     } finally {
       setExporting(false)
