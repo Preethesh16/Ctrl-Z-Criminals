@@ -6,6 +6,14 @@ import { ColumnMappingModal } from './ColumnMappingModal'
 import { Button } from './ui/Button'
 import { slideUp, staggerContainer } from '../theme/motion'
 
+/** A statement needs attention if parsing FAILED outright, or if it was read
+ *  but yielded ZERO transactions (blurry scan, a photo that isn't a bank
+ *  statement, or a layout the parser couldn't map). */
+function needsAttention(doc: DocumentOut): boolean {
+  if (doc.status === 'failed') return true
+  return doc.status !== 'parsing' && doc.status !== 'uploaded' && doc.txn_count === 0
+}
+
 /** Plain-English reason a statement could not be read. */
 function explainFailure(doc: DocumentOut): string {
   const err = (doc.error ?? '').toLowerCase()
@@ -15,6 +23,9 @@ function explainFailure(doc: DocumentOut): string {
     return 'This file format is not supported — export the statement as PDF, Excel or CSV.'
   if (err.includes('unrecognized') || err.includes('layout'))
     return "The statement's table layout was not recognised — map its columns manually below."
+  if (doc.status !== 'failed' && doc.txn_count === 0)
+    return 'The file was read but no transactions were found — it may be a blurry scan or photo, ' +
+      'or not a bank statement. Upload a clearer copy, or map its columns manually below.'
   return doc.error
     ? `Could not read this statement: ${doc.error}`
     : 'Could not read this statement.'
@@ -41,7 +52,7 @@ export function FailedStatements({
   const load = useCallback(() => {
     api
       .listDocuments(caseId)
-      .then((docs) => setFailed(docs.filter((d) => d.status === 'failed')))
+      .then((docs) => setFailed(docs.filter(needsAttention)))
       .catch(() => setFailed([]))
   }, [caseId])
 
