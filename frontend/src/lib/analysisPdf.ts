@@ -27,10 +27,10 @@ import { signatureLine, signReportContent } from './reportSigning'
 
 type RoledNode = GraphNodeData & { role: NodeRole }
 
-const MARGIN = 40
+export const MARGIN = 40
 
 /** Plain-language facts block used as the "Summary" at the top of each PDF. */
-function summaryBlock(doc: jsPDF, facts: Array<[string, string]>, y: number): number {
+export function summaryBlock(doc: jsPDF, facts: Array<[string, string]>, y: number): number {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
   doc.text('Summary', MARGIN, y)
@@ -53,11 +53,11 @@ function graphSummaryFacts(nodes: Array<{ role: NodeRole; label: string }>, roun
   ]
 }
 
-function newDoc(): jsPDF {
+export function newDoc(): jsPDF {
   return new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
 }
 
-function header(doc: jsPDF, title: string, caseLabel: string, y = 42): number {
+export function header(doc: jsPDF, title: string, caseLabel: string, y = 42): number {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
   doc.text(title, MARGIN, y)
@@ -72,7 +72,7 @@ function header(doc: jsPDF, title: string, caseLabel: string, y = 42): number {
   return y + 48
 }
 
-function sectionTitle(doc: jsPDF, text: string, y: number): number {
+export function sectionTitle(doc: jsPDF, text: string, y: number): number {
   if (y > doc.internal.pageSize.getHeight() - 120) {
     doc.addPage()
     y = 48
@@ -84,7 +84,7 @@ function sectionTitle(doc: jsPDF, text: string, y: number): number {
   return y + 10
 }
 
-function footerAll(doc: jsPDF, label: string, signature?: string): void {
+export function footerAll(doc: jsPDF, label: string, signature?: string): void {
   const pages = doc.getNumberOfPages()
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
@@ -97,7 +97,7 @@ function footerAll(doc: jsPDF, label: string, signature?: string): void {
   }
 }
 
-function afterTableY(doc: jsPDF): number {
+export function afterTableY(doc: jsPDF): number {
   return (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 120
 }
 
@@ -137,7 +137,7 @@ function accountsTable(doc: jsPDF, nodes: RoledNode[], y: number): number {
   return afterTableY(doc) + 18
 }
 
-function roundTripsSection(doc: jsPDF, roundTrips: RoundTrip[], y: number): number {
+export function roundTripsSection(doc: jsPDF, roundTrips: RoundTrip[], y: number): number {
   y = sectionTitle(doc, `Round-tripping — money returning to its origin (${roundTrips.length})`, y)
   if (roundTrips.length === 0) {
     doc.setFontSize(10)
@@ -179,7 +179,7 @@ function roundTripsSection(doc: jsPDF, roundTrips: RoundTrip[], y: number): numb
   return y
 }
 
-function trailSection(
+export function trailSection(
   doc: jsPDF,
   credit: TransactionOut,
   trail: Trail,

@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 32: per-account final report (charge-sheet annexure) (NOT PUSHED)
+- New Reports-page card "Final report — single account": suspicion-ordered account dropdown (from graph roles) + PDF/Excel via DownloadChoice. New `lib/accountReport.ts` collects everything for ONE account (graph slice, only flagged txns, its loops, trails of its top-2 flagged credits, matching documents' SHA-256) and renders a **layered charge-sheet annexure**: 1 summary + "for the charge sheet" checklist (Section 63 BSA e-evidence certificate, 66C/66D IT Act + 317/318 BNS pointers, KYC, hashes, verification ID), 2 suspicious transactions ONLY (top 12 of flagged, with plain-English flag reasons), 3 the account's money flow (top 40 transfers), 4 round-tripping involving it, 5 money trails, 6 evidence chain (statement SHA-256s) — digitally signed like all reports (type `account-final-report:<acct>`).
+- Refactor: exported analysisPdf's internal helpers (header/footer/sections/MARGIN) for reuse instead of duplicating.
+- Verified on forge case: mule account report → 2-page PDF with all 6 layers confirmed via pdfplumber; card + picker render; build + lint clean; web rebuilt. REALDATA round-trips artifact recompute relaunched detached inside api container (`/tmp/recompute.log`). Committed locally only.
+
+
 ### 2026-07-05 — Session 31: user was RIGHT — real round trips found + digital report signatures (NOT PUSHED)
 - **Round trips**: user challenged the zero result. Root cause found: the DFS required ≥3 hops, so A→B→A (the most common round-trip shape, user's own example) was excluded by design. Direct scan of the 110k stored edges found genuine same-money 2-hop loops (e.g. ₹5,00,000 out 07-Mar → ₹1,00,000 back 25-Apr between two statement accounts). Fixed `roundtrip.py`: close at ≥1 path edge (2-hop loops valid) + capped artifact at top-200 by score. Golden checks: 2-hop found, 3-hop planted still found, junk chain rejected; 14 detection tests green.
 - **Proof case `CEN/RT-DEMO/2026`** (user request): uploaded the two real statements involved (098030016134598.pdf + 958533930537174 pdf) → 11,338 txns parsed, analysis in 15s → **3 genuine round trips detected** (₹5L→₹1L 20%, 2×₹2L→₹65k 32.6%), graph 53 nodes/356 edges. REALDATA artifact recompute (full 110k-edge search) left running in background via docker exec.
