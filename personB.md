@@ -89,6 +89,10 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 36: verify accepts evidence-locker SHA-256 hashes (NOT PUSHED)
+- User pasted a SHA-256 from the investigation report (`bac312…c400c8`) → "NOT GENUINE". Diagnosed: it's a `Document.sha256` (uploaded statement `258082779154.pdf`, evidence chain), not a report signature. Extended `/reports/verify` fallback chain: ID → signature prefix → content-hash prefix → **Document.sha256 prefix** (returns valid:true, report_type "source statement in the evidence locker: <filename>", case + upload time). Mock adapter mirrors via `documents` map. Card copy: "…or any SHA-256 evidence hash…"; result wording "recorded" (was "signed") for uploaded files. Verified: user's exact hash → valid:true, CEN/0042/2026. Build+lint clean, api+web rebuilt. Committed locally only.
+
+
 ### 2026-07-05 — Session 35: verify-a-report accepts any token from the footer (NOT PUSHED)
 - User: the hash in the report should be accepted by "Verify a report". Before, only the Verification ID (uuid) worked; pasting the Signature failed. Backend `/reports/verify/{token}` now falls back from ID → signature prefix → content-hash prefix (strips the trailing "…" the footer prints on the truncated 16-char signature). Mock adapter mirrors it; verify card relabelled "Verification ID or Signature", strips ellipsis client-side. E2E on Docker: full ID / full signature / **16-char truncated signature+ellipsis (exactly as printed)** / content hash all → valid:true; fake → 404. Build+lint clean, api+web rebuilt. Committed locally only.
 
