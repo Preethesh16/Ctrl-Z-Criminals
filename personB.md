@@ -89,6 +89,10 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 35: verify-a-report accepts any token from the footer (NOT PUSHED)
+- User: the hash in the report should be accepted by "Verify a report". Before, only the Verification ID (uuid) worked; pasting the Signature failed. Backend `/reports/verify/{token}` now falls back from ID → signature prefix → content-hash prefix (strips the trailing "…" the footer prints on the truncated 16-char signature). Mock adapter mirrors it; verify card relabelled "Verification ID or Signature", strips ellipsis client-side. E2E on Docker: full ID / full signature / **16-char truncated signature+ellipsis (exactly as printed)** / content hash all → valid:true; fake → 404. Build+lint clean, api+web rebuilt. Committed locally only.
+
+
 ### 2026-07-05 — Session 34: money trail default = "until this money has left" (balance rule) (NOT PUSHED)
 - User described wanting the trail to follow a credit out until the account is left with ≤ its pre-credit balance = the existing `stop_rule="balance"`. Verified on real data: ₹5L credit (pre-bal ₹2,64,410) → traced, 0 resting on both rules; identical on normal accounts. Made **balance the default** in MoneyTrailPage (was tranche), relabelled buttons ("Until this money has left" primary / "Until fully spent (FIFO)"), reworded header. Backend `fifo_trail.py` already correct — no backend change.
 - Caveat found (not blocking): on ultra-high-churn accounts (₹38L credit in an 11k-txn account) the balance rule can report the credit as still resting because FIFO says older money left first — defensible forensically; tranche rule shows the full 8-hop flow there. Both toggles kept.
