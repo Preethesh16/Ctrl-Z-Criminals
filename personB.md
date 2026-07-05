@@ -89,6 +89,12 @@
 
 ## Session log (newest first)
 
+### 2026-07-05 — Session 34: money trail default = "until this money has left" (balance rule) (NOT PUSHED)
+- User described wanting the trail to follow a credit out until the account is left with ≤ its pre-credit balance = the existing `stop_rule="balance"`. Verified on real data: ₹5L credit (pre-bal ₹2,64,410) → traced, 0 resting on both rules; identical on normal accounts. Made **balance the default** in MoneyTrailPage (was tranche), relabelled buttons ("Until this money has left" primary / "Until fully spent (FIFO)"), reworded header. Backend `fifo_trail.py` already correct — no backend change.
+- Caveat found (not blocking): on ultra-high-churn accounts (₹38L credit in an 11k-txn account) the balance rule can report the credit as still resting because FIFO says older money left first — defensible forensically; tranche rule shows the full 8-hop flow there. Both toggles kept.
+- Build + lint clean; web rebuilt. Committed locally only. REALDATA round-trip recompute relaunched (script was wiped by container churn).
+
+
 ### 2026-07-05 — Session 33: flow graph — promote 50% of probable edges to confirmed (NOT PUSHED)
 - User request: replace half the probable edges with confirmed. `promoteProbableEdges(g)` in FlowGraphPage runs once at graph load: deterministic (every 2nd probable edge by sorted id → confirmed), so the graph, edge drawers, filters and exports all agree. Verified on mock: probable 2→1, confirmed 4→5 (exactly 50%). Build + lint clean; web rebuilt. Committed locally only.
 - REALDATA round-trips recompute relaunched detached in api container (`docker exec -d`, `/tmp/recompute.log`) — earlier attempts kept dying when the host-side exec was interrupted by web rebuilds.
